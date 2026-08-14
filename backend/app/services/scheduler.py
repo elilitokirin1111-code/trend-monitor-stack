@@ -18,6 +18,7 @@ from app.utils.sources import HOT_SOURCES
 from app.services.config_service import config_service
 from app.services.ai_service import ai_service
 from app.services.hotspot_collection import hotspot_collection_service
+from app.services.hotspot_normalization import hotspot_normalization_service
 from app.utils.logger import logger
 
 
@@ -43,6 +44,7 @@ class SchedulerService:
         self._last_digest_result = None
         self._last_hotspot_run = None
         self._last_hotspot_result = None
+        self._last_normalization_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
@@ -71,6 +73,7 @@ class SchedulerService:
                 if self._last_hotspot_run
                 else None,
                 "last_run_result": self._last_hotspot_result,
+                "last_normalization_result": self._last_normalization_result,
             },
         }
 
@@ -534,6 +537,7 @@ class SchedulerService:
     async def _hotspot_collection_job(self):
         """采集四平台窗口数据；失败只记录，不生成伪造快照。"""
         self._last_hotspot_run = datetime.now(timezone.utc)
+        self._last_normalization_result = None
         try:
             outcomes = await hotspot_collection_service.collect_all()
             self._last_hotspot_result = [
@@ -545,6 +549,19 @@ class SchedulerService:
                     "error_code": outcome.error_code,
                 }
                 for outcome in outcomes
+            ]
+            normalization_outcomes = await hotspot_normalization_service.process_pending()
+            self._last_normalization_result = [
+                {
+                    "snapshot_id": outcome.snapshot_id,
+                    "state": outcome.state,
+                    "normalization_run_id": outcome.normalization_run_id,
+                    "status": outcome.status.value if outcome.status else None,
+                    "total_count": outcome.total_count,
+                    "group_count": outcome.group_count,
+                    "error": outcome.error,
+                }
+                for outcome in normalization_outcomes
             ]
             return outcomes
         except Exception as e:

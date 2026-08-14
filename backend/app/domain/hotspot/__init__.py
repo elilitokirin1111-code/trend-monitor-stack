@@ -17,13 +17,27 @@ from .models import (
     RawHotItem,
     utc_now,
 )
+from .normalization import (
+    DedupGroup,
+    DedupMember,
+    NormalizationBatch,
+    NormalizationStatus,
+    NormalizedHotItem,
+    PublishedAtPrecision,
+    SnapshotRawItem,
+)
 from .window import SnapshotWindow, snapshot_window_for
 
 __all__ = [
     "CollectRequest",
     "CollectionStatus",
     "CollectorResult",
+    "DedupGroup",
+    "DedupMember",
     "Freshness",
+    "NormalizationBatch",
+    "NormalizationStatus",
+    "NormalizedHotItem",
     "Platform",
     "ProviderAttempt",
     "ProviderError",
@@ -33,7 +47,9 @@ __all__ = [
     "ProviderHotItem",
     "ProviderResult",
     "ProviderStatus",
+    "PublishedAtPrecision",
     "RawHotItem",
+    "SnapshotRawItem",
     "SnapshotWindow",
     "snapshot_window_for",
     "utc_now",

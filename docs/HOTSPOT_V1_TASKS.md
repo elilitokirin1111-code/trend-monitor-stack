@@ -16,7 +16,7 @@
 | 1 | Collector V2 | 已完成 | 合同/编排/fallback 单元与集成测试 |
 | 2 | 四平台数据接入 | 已完成（外部可用性受限） | 四平台真实契约测试与失败证据 |
 | 3 | 30 分钟历史快照 | 已完成 | 迁移、幂等、窗口和恢复测试 |
-| 4 | 热点标准化与基础去重 | 未开始 | 规则、Unicode、URL、回放测试 |
+| 4 | 热点标准化与基础去重 | 已完成 | 规则、Unicode、URL、回放测试 |
 | 5 | 跨平台事件聚类 | 未开始 | 候选召回、边界、规模测试 |
 | 6 | 趋势生命周期引擎 | 未开始 | 状态机、配置、时间序列测试 |
 | 7 | AI 分类与酒旅相关性 | 未开始 | 结构化输出、降级、评测集测试 |
@@ -237,12 +237,53 @@ Phase 4 只实现热点标准化与基础去重：
 
 ## Phase 4：热点标准化与基础去重
 
-- [ ] 实现 Unicode、空白、标点和标题规范化。
-- [ ] 实现 canonical URL。
-- [ ] 实现热度单位和平台时间解析。
-- [ ] 实现外部 ID、URL、严格标题指纹去重。
-- [ ] 保存规则版本与匹配证据。
-- [ ] 完成边界/回放测试、任务文档更新和独立 commit。
+- [x] 实现 Unicode、空白、标点和标题规范化。
+- [x] 实现 canonical URL。
+- [x] 实现热度单位和平台时间解析。
+- [x] 实现外部 ID、URL、严格标题指纹去重。
+- [x] 保存规则版本与匹配证据。
+- [x] 完成边界/回放测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 新增不可变的 `SnapshotRawItem`、`NormalizedHotItem`、`NormalizationBatch`、`DedupGroup` 和匹配证据领域合同。
+- 标题规范化使用 Unicode NFKC、格式控制字符清理、空白折叠和明确标点映射；严格标题指纹额外移除空白/标点并 casefold，不修改 raw 标题。
+- canonical URL 仅接受 HTTP(S)，统一 scheme/IDNA host/默认端口/路径编码，排序 query，移除 fragment 与配置化 tracking 参数；带凭据或非法端口的 URL 明确失败。
+- 热度以 `Decimal` 规则解析整数、小数、千/万/亿、K/M/W 等配置化单位，不可识别单位不猜测数值。
+- 平台时间支持带时区 ISO、Unix 秒/毫秒、刚刚、分钟/小时/天前、昨天、月日等保守格式；相对时间以原始 `observed_at` 为锚，无法解析时保存 warning，不伪造时间。
+- 基础去重在单个快照内按“平台 + Provider 外部 ID”“平台 + canonical URL”“平台 + 严格标题指纹”建立哈希索引，并以并查集做线性候选合并；未使用 LLM，也没有全量两两比较。
+- 每个去重组选择最低有效 rank、再按原始位置排序的代表项；成员保存匹配类型、匹配对象和匹配值 SHA-256，可审计传递合并。
+- 新增 `hotspot_normalization_runs`、`hotspot_normalized_items`、`hotspot_dedup_groups`、`hotspot_dedup_members` SQLite/MySQL 迁移；以 `snapshot + rule_version + config_hash` 幂等。
+- 同一配置重跑会跳过，规则或配置变化会追加新批次；失败派生记录保留 error，原始数据和旧派生版本均不覆盖。
+- Collector V2 Scheduler 在采集后通过独立 `HotspotNormalizationService` 回放待处理 fresh 快照；单个快照失败被隔离并保留为可重试状态。
+
+### 遗留问题
+
+- 本阶段只做快照内、低误判的确定性去重；相似标题、跨平台内容和跨时间事件合并必须等 Phase 5 的候选召回与事件聚类。
+- 未识别的热度或时间格式只产生 `partial`/warning；新增格式必须提升规则版本并通过历史回放测试，不能原地改写旧结果。
+- tracking 参数默认列表可能不适合所有自建 Provider，管理员可配置；配置变化会安全生成新的 append-only 标准化批次。
+- MySQL 002 迁移尚未在生产同版本实例演练，仍需在部署前执行迁移、回滚和备份恢复验证。
+
+### 测试证据
+
+- `pytest -W error::DeprecationWarning`：141 passed；Phase 4 新增 36 项规则、Unicode、URL、热度、时间、去重、规模、迁移和回放测试。
+- 2000 条唯一热点的规模保护测试确认去重键只提取 2000 次，不执行 O(n²) 比较或任何 LLM 调用。
+- 覆盖配置哈希、非法后台配置、IDNA/追踪参数/危险 URL、小数单位、相对时间、跨年月日、partial/failed、传递去重证据、Provider/平台作用域、空快照、幂等与规则升级追加。
+- `ruff check`、`ruff format --check`、`python -m compileall` 通过；前端 Vite 生产构建通过；`npm audit` 为 0 vulnerabilities。
+
+### 下一 Phase 计划
+
+Phase 5 只实现跨平台事件聚类：
+
+- 新增事件、事件成员、聚类运行和候选匹配证据表，记录算法/配置版本。
+- 使用时间窗、实体/关键词、n-gram/MinHash 或 ANN 建立有上限的候选召回，不做全量两两比较。
+- 先执行确定性相似度与配置化阈值；仅把灰区候选交给可选 AI 语义边界判断。
+- AI 不可用、超时或输出非法时保持确定性结果并记录降级，不阻断事件回放。
+- 建立跨平台正负例、边界例、规模保护和历史重放测试；不提前实现趋势生命周期或 Dashboard。
+
+### Commit
+
+本节随 `feat(phase-4): normalize and deduplicate snapshot items` 独立提交。
 
 ## Phase 5：跨平台事件聚类
 

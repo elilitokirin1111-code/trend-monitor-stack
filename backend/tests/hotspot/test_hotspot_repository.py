@@ -116,14 +116,17 @@ def test_migration_is_versioned_and_idempotent(tmp_path: Path) -> None:
     database = _database(tmp_path)
     runner = HotspotMigrationRunner(database)
 
-    assert runner.apply() == (1,)
+    assert runner.apply() == (1, 2)
     assert runner.apply() == ()
 
     with database.get_connection() as connection:
-        row = connection.execute(
+        rows = connection.execute(
             "SELECT version, name, length(checksum) FROM hotspot_schema_migrations"
-        ).fetchone()
-    assert tuple(row) == (1, "initial", 64)
+        ).fetchall()
+    assert [tuple(row) for row in rows] == [
+        (1, "initial", 64),
+        (2, "normalization", 64),
+    ]
 
 
 def test_fresh_collection_persists_evidence_and_one_snapshot(tmp_path: Path) -> None:

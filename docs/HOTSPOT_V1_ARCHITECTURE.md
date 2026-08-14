@@ -186,8 +186,10 @@ Phase 3 已将原始层实体落为 `hotspot_*` 独立表；后续派生层仍�
 | `hotspot_raw_items` | 不可变原始热点；保留 Provider 原字段和原始载荷哈希 |
 | `hotspot_snapshots` | 平台在 30 分钟窗口的一次 fresh 观测 |
 | `hotspot_snapshot_members` | 快照与原始条目的成员关系及当次顺序 |
-| `normalized_hot_items` | 标准标题、URL、数值热度、时间、语言等派生字段 |
-| `dedup_groups` | 单平台/同 Provider 的确定性去重结果 |
+| `hotspot_normalization_runs` | 快照、规则版本、配置哈希、处理状态和计数 |
+| `hotspot_normalized_items` | 标准标题、URL、数值热度、时间精度、warning 等派生字段 |
+| `hotspot_dedup_groups` | 快照内低误判的确定性去重结果和代表项 |
+| `hotspot_dedup_members` | 去重成员、匹配类型、对象和哈希证据 |
 | `events` | 跨平台热点事件主记录 |
 | `event_members` | 事件与规范化条目的成员关系和匹配证据 |
 | `trend_states` | 事件在各时间窗的生命周期、速度、加速度和评分 |
@@ -392,6 +394,21 @@ Phase 3 在 Collector 端口之后新增 `HotspotRepository`，不改变 Provide
 - `hotspot_collection_locks` 是可过期、按 owner 释放的操作锁表，不属于 append-only 原始业务数据。
 
 Scheduler 保留 HotPush 原有 `fetch_and_push` 兼容任务，并新增 `hotspot_collect_v2`。两者频率分别配置；暂停/恢复会同时作用于两项任务，手动 V2 入口与定时任务调用同一个应用服务。V2 任务限制单实例执行并开启 coalesce/misfire 控制，数据库窗口锁负责跨进程互斥。
+
+## 18. Phase 4 标准化与基础去重实现
+
+Phase 4 只消费 fresh `hotspot_snapshots` 的成员，不扫描未获选 Provider 条目，也不把 stale 重放转成新派生窗口。`HotspotNormalizationService` 查询当前规则版本和配置哈希尚未处理的快照，通过纯函数 `HotspotNormalizer` 生成完整批次，再由 `NormalizationRepository` 单事务追加派生结果。
+
+规则与证据：
+
+- `hotspot_normalization_rule_version` 和 `hotspot_dedup_algorithm_version` 控制语义版本；tracking 参数、热度单位和平台时间字段可通过现有 settings API 配置。
+- 配置序列化采用稳定排序并保存 SHA-256；同一快照、规则和配置只有一个成功落库批次，竞态写入由数据库唯一约束收敛。
+- 每个 raw 快照成员都产生 success、partial 或 failed 标准化记录；失败不删除 raw，warning 与错误码随派生记录保存。
+- 去重键按平台作用域构建；外部 ID 额外按 Provider 作用域，避免不同 Provider 的 ID 空间碰撞。
+- 候选召回使用哈希表，连通分量使用并查集；算法不会枚举所有热点对，也没有 LLM 依赖。
+- 每个非失败标准化项恰好属于一个去重组，包括单例组；代表项与所有成员证据均受领域合同和数据库外键约束。
+
+本阶段的去重组不是跨平台事件。Phase 5 只能读取版本化标准化/去重结果建立有界候选集，不能直接修改 Phase 4 记录或回退到全量 LLM 两两比较。
 
 Freshness 采用保守证据规则：
 
