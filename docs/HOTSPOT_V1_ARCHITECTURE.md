@@ -299,7 +299,7 @@ V1 要求：
 - MediaCrawler：非商业学习许可证；不得复制、集成、打包、部署或成为商业运行依赖。
 - 平台服务条款、robots、账号授权、频率限制和个人信息处理义务独立于开源许可证，Phase 2 上线前必须完成合规复核。
 
-Phase 0 安全审计补充：HotPush 当前前端锁文件经 `npm audit` 报告 6 个已知问题（1 moderate、5 high），涉及 Vite/esbuild、PostCSS、Rollup、nanoid 和 picomatch。生产部署前必须在独立依赖升级任务中更新、重建并回归测试；不得直接使用 `npm audit fix --force` 跨主版本改写基线。
+Phase 0 安全审计补充：HotPush 导入时的前端锁文件曾报告 6 个已知问题（1 moderate、5 high）。Phase 0 修补提交已将 Vite、Vue 插件和 PostCSS 升级到无已知审计漏洞的兼容版本，更新传递依赖，并通过 `npm audit` 和生产构建；未使用 `npm audit fix --force`。
 
 ## 14. 建议文件变更清单
 

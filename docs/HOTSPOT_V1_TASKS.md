@@ -51,6 +51,7 @@
 - Collector/Provider/Raw/派生层边界和 stale/fallback 规则已确定。
 - 目标数据模型、API 命名空间、Scheduler 拆分、AI 边界和飞书演进方案已确定。
 - GPL 与非商业许可证代码被明确排除在商业仓库之外。
+- Phase 0 后续修补已清除前端 6 个依赖漏洞和后端 6 条弃用警告，并将未核验工具二进制排除出 Git。
 
 ### 遗留问题
 
@@ -58,8 +59,6 @@
 - NewsNow/DailyHotApi 的线上服务稳定性、限流和响应合同需在 Phase 2 以真实调用验证。
 - 小红书公开热榜 Provider 尚未确认，不能承诺实时可用。
 - 平台条款、账号授权、个人信息和商业采集边界需要上线前的合规复核。
-- 前端 `npm audit` 报告 6 个上游锁定依赖问题（1 moderate、5 high）；涉及 Vite/esbuild、PostCSS、Rollup、nanoid、picomatch。需独立升级并回归，不能使用强制跨主版本修复代替评估。
-- 后端测试有 6 条弃用警告：Pydantic class-based config、Python SQLite 默认 datetime adapter、`datetime.utcnow()`。
 
 ### 测试证据
 
@@ -68,6 +67,7 @@
 - `npm run build`：Vite 生产构建成功，58 modules transformed。
 - `git diff --check`：通过。
 - OpenCLI/AutoCLI 工件核验：本地 `autocli 0.3.8` 与 `nashsu/AutoCLI` v0.3.8 Windows 官方发布包内 SHA-256 一致。
+- Phase 0 修补复测：`pytest -W error::DeprecationWarning` 为 44 passed；`npm audit` 为 0 vulnerabilities；Vite 8.2.1 生产构建通过。
 
 ### 下一 Phase 计划
 

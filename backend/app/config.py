@@ -2,12 +2,17 @@
 配置文件
 """
 import secrets
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, List
 
 
 class Settings(BaseSettings):
     """应用配置"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
 
     # 应用配置
     app_name: str = "HotPush"
@@ -81,10 +86,4 @@ class Settings(BaseSettings):
     # 代理配置（用于访问 Telegram 等需要代理的服务）
     http_proxy: Optional[str] = None
     https_proxy: Optional[str] = None
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
-
 settings = Settings()

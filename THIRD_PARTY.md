@@ -120,6 +120,6 @@ The HotPush baseline currently declares the following direct dependencies. Exact
 
 ## 6. Phase 0 security observations
 
-`npm audit` against the inherited `frontend/package-lock.json` reported 6 vulnerabilities: 1 moderate and 5 high. Affected packages include Vite/esbuild, PostCSS, Rollup, nanoid and picomatch. These are inherited baseline dependencies, not accepted production risk. Upgrade them in a scoped change with build and regression tests; do not use a forced major-version audit fix without review.
+The inherited `frontend/package-lock.json` initially reported 6 vulnerabilities: 1 moderate and 5 high. The Phase 0 remediation upgraded Vite to 8.2.1, `@vitejs/plugin-vue` to 6.0.8 and PostCSS to 8.5.26, refreshed compatible transitive dependencies and reached `npm audit` with 0 known vulnerabilities. No forced audit fix was used.
 
-The inherited Python test suite passes on Python 3.14.6 but emits deprecation warnings for Pydantic class-based settings config, Python's SQLite default datetime adapter and naive `datetime.utcnow()`. Track these before their respective removals become runtime failures.
+The inherited Python suite initially emitted deprecation warnings for Pydantic class-based settings config, Python's SQLite default datetime adapter and naive `datetime.utcnow()`. The Phase 0 remediation moved to `SettingsConfigDict`, registered an explicit ISO-8601 SQLite datetime adapter and made JWT expiry timezone-aware. The full suite now passes with `DeprecationWarning` treated as an error.

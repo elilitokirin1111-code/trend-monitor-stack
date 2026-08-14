@@ -60,6 +60,9 @@ tmp/
 temp/
 .cache/
 
+# 本地采集工具（需独立完成来源、许可证和校验后再分发）
+bin/*.exe
+
 # 敏感配置（保留 .env.example）
 backend/.env
 frontend/.env

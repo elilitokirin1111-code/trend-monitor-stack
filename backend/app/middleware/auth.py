@@ -3,7 +3,7 @@
 使用 JWT Token 进行用户认证和权限控制
 """
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -48,7 +48,7 @@ def is_auth_enabled() -> bool:
 
 def create_token(data: dict) -> str:
     """创建 JWT Token"""
-    expire = datetime.utcnow() + timedelta(hours=settings.jwt_expire_hours)
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)
     to_encode = data.copy()
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=JWT_ALGORITHM)
