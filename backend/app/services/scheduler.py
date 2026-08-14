@@ -19,6 +19,7 @@ from app.services.database import db
 from app.services.hotspot_clustering import hotspot_clustering_service
 from app.services.hotspot_collection import hotspot_collection_service
 from app.services.hotspot_normalization import hotspot_normalization_service
+from app.services.hotspot_trends import hotspot_trend_service
 from app.services.push_service import push_service
 from app.services.rss_fetcher import rss_fetcher
 from app.utils.logger import logger
@@ -48,6 +49,7 @@ class SchedulerService:
         self._last_hotspot_result = None
         self._last_normalization_result = None
         self._last_clustering_result = None
+        self._last_trend_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
@@ -78,6 +80,7 @@ class SchedulerService:
                 "last_run_result": self._last_hotspot_result,
                 "last_normalization_result": self._last_normalization_result,
                 "last_clustering_result": self._last_clustering_result,
+                "last_trend_result": self._last_trend_result,
             },
         }
 
@@ -539,6 +542,7 @@ class SchedulerService:
         self._last_hotspot_run = datetime.now(timezone.utc)
         self._last_normalization_result = None
         self._last_clustering_result = None
+        self._last_trend_result = None
         try:
             outcomes = await hotspot_collection_service.collect_all()
             self._last_hotspot_result = [
@@ -580,6 +584,18 @@ class SchedulerService:
                 "event_count": clustering_outcome.event_count,
                 "semantic_call_count": clustering_outcome.semantic_call_count,
                 "error": clustering_outcome.error,
+            }
+            trend_outcome = await hotspot_trend_service.process_current()
+            self._last_trend_result = {
+                "state": trend_outcome.state,
+                "trend_run_id": trend_outcome.trend_run_id,
+                "status": trend_outcome.status.value if trend_outcome.status else None,
+                "event_count": trend_outcome.event_count,
+                "lifecycle_counts": {
+                    state.value: count
+                    for state, count in trend_outcome.lifecycle_counts.items()
+                },
+                "error": trend_outcome.error,
             }
             return outcomes
         except Exception as e:

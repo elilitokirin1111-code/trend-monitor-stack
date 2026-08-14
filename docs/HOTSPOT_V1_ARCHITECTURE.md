@@ -194,7 +194,8 @@ Phase 3 已将原始层实体落为 `hotspot_*` 独立表；后续派生层仍�
 | `hotspot_cluster_candidates` | 有界召回原因、确定性分数、语义边界状态和最终决策 |
 | `hotspot_events` | 某次版本化聚类运行产出的跨平台热点事件 |
 | `hotspot_event_members` | 事件与 Phase 4 去重组代表项的成员关系 |
-| `trend_states` | 事件在各时间窗的生命周期、速度、加速度和评分 |
+| `hotspot_trend_runs` | 一次版本化趋势评估的聚类来源、采集水位、配置/输入哈希和状态计数 |
+| `hotspot_trend_states` | 事件序列在各评估水位的生命周期、特征、质量和跨运行 lineage |
 | `ai_classifications` | 分类、酒旅相关性、摘要、模型/提示词版本与证据 |
 | `reports` | 日报/周报内容、版本、时间窗和生成状态 |
 | `report_deliveries` | 飞书等渠道的幂等投递、响应、重试与失败记录 |
@@ -233,9 +234,13 @@ Phase 5 已采用字符 n-gram 倒排表和关键词特征落地有界召回：�
 
 ## 8. 趋势生命周期
 
-趋势引擎只消费快照与事件成员，初始状态建议为：`emerging`、`rising`、`peaking`、`declining`、`dormant`、`recurrent`。评分候选维度：平台覆盖、排名、热度、上升速度、持续时间、新增内容量、可信度与 freshness。
+Phase 6 的趋势引擎只消费版本化 Phase 5 事件成员和其 Phase 3 真实快照观测，状态为：`emerging`、`rising`、`peaking`、`declining`、`dormant`、`recurrent`。它不读取 Provider 临时响应，也不与 HotPush 兼容 `/api/trends` 的 `hot_item_snapshots` 评分混用。
 
-任何评分公式、窗口、阈值、衰减和权重必须来自版本化配置。`stale` 数据不得增加实时速度或触发“正在上升”的结论。
+每条 fresh 观测先根据名次和对数热度得到有界基础强度，再按 30 分钟桶计算 current/previous/earlier strength、速度和加速度。事件特征另含平台覆盖、持续度、观测数、最近 fresh 年龄、复发间隔，以及本评估水位的失败/stale/缺失平台计数和完整度。趋势总分默认由当前强度、平台覆盖、正速度、正加速度和持续度加权，所有窗口、阈值、权重与算法版本均来自 `hotspot_trend_*` settings 并进入稳定配置哈希。
+
+freshness 是硬边界：只有 `fresh` 观测能贡献强度、速度和加速度；`stale` 只保存为质量证据，不能触发 rising。最新采集运行是评估水位，因此失败采集在不创建快照的前提下仍能推进事件年龄并触发 declining/dormant。若没有 fresh 证据，质量明确标为 `stale_only` 或 `no_fresh_data`，不得伪造实时趋势。
+
+Phase 5 event ID 隶属于单次聚类运行。Phase 6 使用共享去重组重叠优先、代表指纹兜底的确定性 lineage 建立稳定 `trend_series_id`，并保存匹配类型、重叠数、上一事件和上一状态。复发状态要求既有 dormant 历史且 fresh 证据在配置化间隔后重新出现；旧 Phase 5/6 结果都不回写。
 
 ## 9. AI 使用边界
 

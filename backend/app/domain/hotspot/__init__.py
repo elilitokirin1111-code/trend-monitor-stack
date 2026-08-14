@@ -36,6 +36,19 @@ from .normalization import (
     PublishedAtPrecision,
     SnapshotRawItem,
 )
+from .trends import (
+    PlatformSignal,
+    PreviousTrendState,
+    TrendBatch,
+    TrendDataQuality,
+    TrendEvaluationContext,
+    TrendEventInput,
+    TrendFeatures,
+    TrendLifecycleState,
+    TrendObservation,
+    TrendRunStatus,
+    TrendStateRecord,
+)
 from .window import SnapshotWindow, snapshot_window_for
 
 __all__ = [
@@ -56,6 +69,8 @@ __all__ = [
     "NormalizationStatus",
     "NormalizedHotItem",
     "Platform",
+    "PlatformSignal",
+    "PreviousTrendState",
     "ProviderAttempt",
     "ProviderError",
     "ProviderErrorKind",
@@ -69,6 +84,15 @@ __all__ = [
     "SemanticStatus",
     "SnapshotRawItem",
     "SnapshotWindow",
+    "TrendBatch",
+    "TrendDataQuality",
+    "TrendEvaluationContext",
+    "TrendEventInput",
+    "TrendFeatures",
+    "TrendLifecycleState",
+    "TrendObservation",
+    "TrendRunStatus",
+    "TrendStateRecord",
     "snapshot_window_for",
     "utc_now",
 ]

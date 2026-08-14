@@ -4,6 +4,7 @@ from .clustering import ClusteringRepository
 from .migrations import HotspotMigrationRunner, MigrationDriftError
 from .normalization import NormalizationRepository
 from .repository import HotspotRepository, WindowedCollectionWriter
+from .trends import StoredPreviousTrend, TrendRepository, TrendRepositoryInput
 
 __all__ = [
     "ClusteringRepository",
@@ -11,5 +12,8 @@ __all__ = [
     "HotspotRepository",
     "MigrationDriftError",
     "NormalizationRepository",
+    "StoredPreviousTrend",
+    "TrendRepository",
+    "TrendRepositoryInput",
     "WindowedCollectionWriter",
 ]
