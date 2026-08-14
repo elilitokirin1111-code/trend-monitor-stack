@@ -76,6 +76,13 @@ class AIService:
                 pass
         return DEFAULT_AI_CONFIG.copy()
 
+    def get_public_config(self) -> Dict[str, Any]:
+        """Return AI settings without exposing the configured credential."""
+        config = self.get_config().copy()
+        if config.get("api_key"):
+            config["api_key"] = "************"
+        return config
+
     def set_config(self, config: Dict[str, Any]):
         full_config = DEFAULT_AI_CONFIG.copy()
         full_config.update(config)

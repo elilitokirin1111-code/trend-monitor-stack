@@ -80,11 +80,34 @@ class _FakeTrendService:
         )()
 
 
+class _FakeClassificationService:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def process_current(self):
+        self.calls += 1
+        return type(
+            "Outcome",
+            (),
+            {
+                "state": "no_input",
+                "classification_run_id": None,
+                "status": None,
+                "event_count": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "skipped_count": 0,
+                "error": None,
+            },
+        )()
+
+
 def test_scheduler_registers_single_instance_thirty_minute_job(monkeypatch) -> None:
     fake_hotspot = _FakeHotspotService()
     fake_normalization = _FakeNormalizationService()
     fake_clustering = _FakeClusteringService()
     fake_trends = _FakeTrendService()
+    fake_classification = _FakeClassificationService()
     monkeypatch.setattr(scheduler_module, "db", _FakeDatabase())
     monkeypatch.setattr(scheduler_module, "hotspot_collection_service", fake_hotspot)
     monkeypatch.setattr(
@@ -101,6 +124,11 @@ def test_scheduler_registers_single_instance_thirty_minute_job(monkeypatch) -> N
         scheduler_module,
         "hotspot_trend_service",
         fake_trends,
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "hotspot_classification_service",
+        fake_classification,
     )
     service = scheduler_module.SchedulerService()
 
@@ -123,6 +151,7 @@ def test_manual_trigger_uses_same_hotspot_job(monkeypatch) -> None:
     fake_normalization = _FakeNormalizationService()
     fake_clustering = _FakeClusteringService()
     fake_trends = _FakeTrendService()
+    fake_classification = _FakeClassificationService()
     monkeypatch.setattr(scheduler_module, "hotspot_collection_service", fake_hotspot)
     monkeypatch.setattr(
         scheduler_module,
@@ -139,6 +168,11 @@ def test_manual_trigger_uses_same_hotspot_job(monkeypatch) -> None:
         "hotspot_trend_service",
         fake_trends,
     )
+    monkeypatch.setattr(
+        scheduler_module,
+        "hotspot_classification_service",
+        fake_classification,
+    )
     service = scheduler_module.SchedulerService()
 
     assert asyncio.run(service.trigger_hotspot_collection()) == ()
@@ -146,3 +180,4 @@ def test_manual_trigger_uses_same_hotspot_job(monkeypatch) -> None:
     assert fake_normalization.calls == 1
     assert fake_clustering.calls == 1
     assert fake_trends.calls == 1
+    assert fake_classification.calls == 1

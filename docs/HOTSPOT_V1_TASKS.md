@@ -19,7 +19,7 @@
 | 4 | 热点标准化与基础去重 | 已完成 | 规则、Unicode、URL、回放测试 |
 | 5 | 跨平台事件聚类 | 已完成 | 158 tests + 有界候选规模保护 |
 | 6 | 趋势生命周期引擎 | 已完成 | 179 tests + freshness/失败水位保护 |
-| 7 | AI 分类与酒旅相关性 | 未开始 | 结构化输出、降级、评测集测试 |
+| 7 | AI 分类与酒旅相关性 | 已完成（生产模型评测待配置） | 204 tests + 严格 schema/证据/降级门禁 |
 | 8 | 热点 Dashboard | 未开始 | API、组件、构建、端到端测试 |
 | 9 | 日报/周报系统 | 未开始 | 窗口、模板、幂等、快照测试 |
 | 10 | 飞书报告推送 | 未开始 | 签名、分片、重试、幂等测试 |
@@ -388,12 +388,56 @@ Phase 7 只实现 AI 分类与酒旅相关性：
 
 ## Phase 7：AI 分类与酒旅相关性
 
-- [ ] 定义结构化分类输出 schema。
-- [ ] 实现主题分类、酒旅相关性、理由与摘要。
-- [ ] 记录模型、提示词版本、输入证据、成本和耗时。
-- [ ] 实现超时、无 Key、非法输出和模型失败降级。
-- [ ] 建立人工标注评测集，不用 AI 自评代替验收。
-- [ ] 完成 schema/降级/评测测试、任务文档更新和独立 commit。
+- [x] 定义结构化分类输出 schema。
+- [x] 实现主题分类、酒旅相关性、理由与摘要。
+- [x] 记录模型、提示词版本、输入证据、成本和耗时。
+- [x] 实现超时、无 Key、非法输出和模型失败降级。
+- [x] 建立固定、可人工审阅的标注评测集，不用 AI 自评代替验收。
+- [x] 完成 schema/降级/评测测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 新增不可变分类证据、趋势输入、结构化决策、逐事件记录和批次领域合同。输出严格限制为主题分类、1–5 个标签、酒旅相关性与分数、置信度、理由、摘要和证据 ID。
+- `ClassificationRepository` 只消费最新版本化 `hotspot_trend_states` 及对应 Phase 5 事件成员；模型看到的标题、平台、观测时间、排名和热度都可回溯到不可变派生/快照记录，不读取 Provider 临时响应。
+- 分类响应必须是无 Markdown 包裹的单个 JSON 对象，字段集合和类型必须完全匹配 schema；`evidence_ids` 必须属于当前事件成员，引用不存在的证据会整条失败，不保存伪造决定。
+- 新增独立 `ClassificationProvider` 端口与 `LiteLLMClassificationProvider` 适配器，复用已有 LiteLLM 依赖而未增加第三方包；请求使用确定性温度和 JSON response format，并记录实际模型、耗时、prompt/completion token 及 Provider 可提供的成本。
+- 分类默认独立关闭；旧摘要 `ai_config.enabled` 不会自动启用 Phase 7。只有显式设置 `hotspot_ai_classification_enabled=true` 才调用模型，禁用或缺 Key 时分别保存 skipped/failed 审计状态。
+- classifier/prompt 版本、模型、base URL、超时、最大并发和文本上限通过 `hotspot_ai_*` settings 配置并进入稳定配置哈希；API Key 不进入配置 JSON、哈希、日志或错误正文。
+- 超时、限流、Provider 异常、非法 JSON、schema 漂移、证据越界和无 Key 均有独立错误码；单事件失败不阻断其他事件，也不影响采集、聚类或趋势链。
+- 同一趋势运行、输入、classifier/prompt/model/config 在模型调用前计算确定性 run ID 并查询幂等记录；重复调度不会再次调用模型，配置或提示词版本变化才追加新批次。
+- 新增 SQLite/MySQL 005 迁移：`hotspot_classification_runs` 和 `hotspot_ai_classifications`。运行与逐事件结果保存 input/request/response hash、完整响应正文、结构化决定、证据引用、token/成本、耗时和失败原因，旧趋势结果不回写。
+- Scheduler 已在 TrendEngine 后调用独立 `HotspotClassificationService` 并暴露最新成功/失败/跳过计数；默认关闭时仍形成真实、可审计的 skipped 记录。
+- 修补旧 AI 配置泄密路径：专用 `/api/scheduler/ai-config` 和通用 `/api/config/settings` 均对 legacy `ai_config.api_key` 与 `hotspot_ai_api_key` 做掩码，更新响应也不再返回完整 Key。
+- 新增 12 条固定、可人工审阅的主题/酒旅相关性验收标签，标签与模型预测分离；离线 evaluator 只计算 category/relevance accuracy，缺失预测按错误计，不允许模型给自己打分。
+
+### 遗留问题
+
+- 当前环境没有用户授权的生产模型 Key，因此没有把 fixture 或虚构结果冒充真实模型评测。12 条固定标签只验证 schema、执行器和指标合同；上线前需由酒旅业务负责人复核并扩充真实事件标注集，再对选定模型设定准确率门槛。
+- LiteLLM 适配器已通过隔离契约测试，但不同模型对 JSON response format、token/cost 字段和限流错误的支持仍需用目标 Provider 做真实合同验证。
+- 当前运行前检查可避免顺序重复调用，数据库唯一键可避免重复落库；极端多实例同时首次处理同一趋势运行时仍可能产生重复外部调用，分布式调用租约留到 Phase 11。
+- 模型输出是派生判断而非事实来源；Dashboard 和报告必须同时展示 evidence、data quality 和失败状态，不得只展示摘要文本。
+- MySQL 005 已按现有外键类型设计并通过迁移测试/静态检查，但当前环境没有生产同版本 MySQL，部署前仍需迁移、回滚、索引和备份恢复演练。
+
+### 测试证据
+
+- `pytest -W error::DeprecationWarning`：204 passed；Phase 7 新增 25 项规则、schema、证据约束、超时、限流、并发上限、错误脱敏、Provider 适配、持久化、幂等、评测、安全掩码和 Scheduler 测试。
+- 覆盖严格 JSON 成功、未知 evidence ID、Markdown/非法 JSON、Provider 异常、限流、超时、禁用、缺 Key、API Key 错误脱敏、实际模型/token/成本记录、配置非法和提示词升级追加。
+- 12 条固定标注集验证类别/相关性指标，缺失预测明确计错；测试没有调用外部模型，也没有把固定样例写入生产数据库或对外接口。
+- 新增分类模块通过 `ruff check`、`ruff format --check`；完整 `compileall`、前端 Vite 生产构建和 `npm audit` 在提交门禁中复核。
+
+### 下一 Phase 计划
+
+Phase 8 只实现热点 Dashboard 与 V1 读取 API：
+
+- 新增 `/api/v1/hotspots` 只读接口，联合展示事件、趋势、分类、平台 freshness、失败/缺失和原始证据引用。
+- 为列表、详情、筛选、分页和采集健康定义稳定 response schema；旧 HotPush API 保持兼容。
+- Dashboard 明确区分 fresh/stale/failed、AI success/failed/skipped 和数据年龄，不隐藏 Provider/模型不可用状态。
+- 展示事件成员、趋势生命周期、酒旅相关性与理由；摘要不得脱离证据单独呈现。
+- 完成 API、组件、生产构建和端到端测试；不提前生成日报/周报或发送飞书。
+
+### Commit
+
+本节随 `feat(phase-7): add evidence-grounded AI classification` 独立提交。
 
 ## Phase 8：热点 Dashboard
 

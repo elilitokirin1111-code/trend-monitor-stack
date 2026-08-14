@@ -17,6 +17,7 @@ from app.services.ai_service import ai_service
 from app.services.config_service import config_service
 from app.services.database import db
 from app.services.hotspot_clustering import hotspot_clustering_service
+from app.services.hotspot_classification import hotspot_classification_service
 from app.services.hotspot_collection import hotspot_collection_service
 from app.services.hotspot_normalization import hotspot_normalization_service
 from app.services.hotspot_trends import hotspot_trend_service
@@ -50,6 +51,7 @@ class SchedulerService:
         self._last_normalization_result = None
         self._last_clustering_result = None
         self._last_trend_result = None
+        self._last_classification_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
@@ -81,6 +83,7 @@ class SchedulerService:
                 "last_normalization_result": self._last_normalization_result,
                 "last_clustering_result": self._last_clustering_result,
                 "last_trend_result": self._last_trend_result,
+                "last_classification_result": self._last_classification_result,
             },
         }
 
@@ -543,6 +546,7 @@ class SchedulerService:
         self._last_normalization_result = None
         self._last_clustering_result = None
         self._last_trend_result = None
+        self._last_classification_result = None
         try:
             outcomes = await hotspot_collection_service.collect_all()
             self._last_hotspot_result = [
@@ -596,6 +600,17 @@ class SchedulerService:
                     for state, count in trend_outcome.lifecycle_counts.items()
                 },
                 "error": trend_outcome.error,
+            }
+            classification_outcome = await hotspot_classification_service.process_current()
+            self._last_classification_result = {
+                "state": classification_outcome.state,
+                "classification_run_id": classification_outcome.classification_run_id,
+                "status": classification_outcome.status.value if classification_outcome.status else None,
+                "event_count": classification_outcome.event_count,
+                "success_count": classification_outcome.success_count,
+                "failed_count": classification_outcome.failed_count,
+                "skipped_count": classification_outcome.skipped_count,
+                "error": classification_outcome.error,
             }
             return outcomes
         except Exception as e:

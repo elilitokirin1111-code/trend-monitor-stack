@@ -196,7 +196,8 @@ Phase 3 已将原始层实体落为 `hotspot_*` 独立表；后续派生层仍�
 | `hotspot_event_members` | 事件与 Phase 4 去重组代表项的成员关系 |
 | `hotspot_trend_runs` | 一次版本化趋势评估的聚类来源、采集水位、配置/输入哈希和状态计数 |
 | `hotspot_trend_states` | 事件序列在各评估水位的生命周期、特征、质量和跨运行 lineage |
-| `ai_classifications` | 分类、酒旅相关性、摘要、模型/提示词版本与证据 |
+| `hotspot_classification_runs` | 一次版本化 AI 分类的趋势来源、模型/提示词/配置/输入哈希和状态计数 |
+| `hotspot_ai_classifications` | 逐事件分类、酒旅相关性、摘要、证据引用、响应、token/成本、耗时与失败 |
 | `reports` | 日报/周报内容、版本、时间窗和生成状态 |
 | `report_deliveries` | 飞书等渠道的幂等投递、响应、重试与失败记录 |
 
@@ -260,6 +261,14 @@ Phase 5 event ID 隶属于单次聚类运行。Phase 6 使用共享去重组重�
 
 AI 输出必须结构化校验，并记录输入引用、模型、提示词版本、耗时和失败原因。AI 不可用时，分类/摘要状态为失败或待处理，核心采集链仍可运行。
 
+Phase 7 已把分类实现为 `ClassificationProvider` 可替换端口；业务服务只消费版本化趋势状态和不可变事件成员，不读取 Provider 临时响应，也不允许模型修改趋势或 freshness。生产适配器复用已有 LiteLLM，但默认独立关闭，旧摘要开关不会触发分类费用。
+
+输出字段集合固定为 `category/tags/hospitality_relevance/hospitality_score/confidence/rationale/summary/evidence_ids`。响应必须是严格 JSON，证据 ID 必须是当前事件成员；Markdown 包裹、额外/缺失字段、非法类型或证据越界均保存为失败而不是猜测修复。主题类别、酒旅相关性和摘要属于派生判断，Dashboard/报告必须同时显示输入证据和数据质量。
+
+运行按 `source_trend_run + classifier_version + prompt_version + model + config_hash + input_hash` 幂等，并在外部调用前检查已有 run。逐事件记录保存实际模型、request/response hash、完整模型响应、结构化决定、耗时、token、可用时的成本和独立错误码。禁用、缺 Key、超时、限流、Provider 异常、非法 JSON 和 schema 漂移不会阻断其余事件或上游数据链。
+
+Phase 7 的固定评测资源含 12 条可人工审阅标签，ground truth 与预测分离，离线 evaluator 只比较分类与相关性并将缺失预测计错；它不是模型自评，也不是生产热点。真实模型上线仍需业务负责人扩充/复核标注集并设定验收阈值。
+
 ## 10. API 基线与演进
 
 现有 HotPush API 保留兼容：
@@ -296,7 +305,7 @@ API 响应 freshness 最低要求：
 
 ## 11. Scheduler 基线与演进
 
-HotPush 使用 APScheduler：一个间隔任务执行抓取和推送；摘要任务可配置；每日 03:00 清理旧快照。该兼容任务仍使用 `FETCH_INTERVAL_MINUTES=5`。Phase 3 新增独立 `hotspot_collect_v2` 任务，默认 `HOTSPOT_COLLECTION_INTERVAL_MINUTES=30`，避免改变旧推送语义。
+HotPush 使用 APScheduler：一个间隔任务执行抓取和推送；摘要任务可配置；每日 03:00 清理旧快照。该兼容任务仍使用 `FETCH_INTERVAL_MINUTES=5`。Phase 3 新增独立 `hotspot_collect_v2` 任务，默认 `HOTSPOT_COLLECTION_INTERVAL_MINUTES=30`，避免改变旧推送语义。该 V2 任务当前按 `Collection -> Normalize -> EventCluster -> TrendEngine -> AI Classification` 顺序执行并分别保存最近状态；AI 失败不回滚已完成的上游阶段。
 
 V1 要求：
 

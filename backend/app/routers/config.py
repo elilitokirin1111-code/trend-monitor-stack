@@ -39,7 +39,7 @@ class PushSourcesUpdate(BaseModel):
 @router.get("/settings")
 async def get_settings(_: dict = Depends(require_auth)):
     """获取所有系统设置"""
-    return {"settings": config_service.get_all_settings()}
+    return {"settings": config_service.get_public_settings()}
 
 
 @router.put("/settings")

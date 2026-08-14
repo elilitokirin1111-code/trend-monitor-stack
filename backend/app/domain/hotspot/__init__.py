@@ -1,5 +1,17 @@
 """Hotspot collection domain contracts."""
 
+from .classification import (
+    ClassificationBatch,
+    ClassificationDecision,
+    ClassificationErrorKind,
+    ClassificationEvidence,
+    ClassificationInput,
+    ClassificationRecord,
+    ClassificationRunStatus,
+    ClassificationStatus,
+    HospitalityRelevance,
+    TopicCategory,
+)
 from .clustering import (
     CandidateDecision,
     ClusterCandidate,
@@ -53,6 +65,14 @@ from .window import SnapshotWindow, snapshot_window_for
 
 __all__ = [
     "CandidateDecision",
+    "ClassificationBatch",
+    "ClassificationDecision",
+    "ClassificationErrorKind",
+    "ClassificationEvidence",
+    "ClassificationInput",
+    "ClassificationRecord",
+    "ClassificationRunStatus",
+    "ClassificationStatus",
     "ClusterCandidate",
     "ClusterInputItem",
     "ClusteringBatch",
@@ -65,6 +85,7 @@ __all__ = [
     "EventCluster",
     "EventMember",
     "Freshness",
+    "HospitalityRelevance",
     "NormalizationBatch",
     "NormalizationStatus",
     "NormalizedHotItem",
@@ -84,6 +105,7 @@ __all__ = [
     "SemanticStatus",
     "SnapshotRawItem",
     "SnapshotWindow",
+    "TopicCategory",
     "TrendBatch",
     "TrendDataQuality",
     "TrendEvaluationContext",
