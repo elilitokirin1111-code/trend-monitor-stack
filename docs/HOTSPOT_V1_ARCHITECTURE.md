@@ -99,7 +99,7 @@ Platform
 
 ## 5. Collector V2 与 Provider 合同
 
-建议的核心合同：
+Phase 1 已落地的核心合同：
 
 ```python
 class HotspotProvider(Protocol):
@@ -109,6 +109,23 @@ class HotspotProvider(Protocol):
     async def collect(self, request: CollectRequest) -> ProviderResult: ...
     async def health(self) -> ProviderHealth: ...
 ```
+
+实现位置：
+
+- `backend/app/domain/hotspot/models.py`：不可变领域合同、状态、错误、Provider 条目、原始条目和采集结果。
+- `backend/app/providers/hotspot/base.py`：Provider、原始写入和 stale 读取端口。
+- `backend/app/providers/hotspot/registry.py`：可替换 Provider 注册表及平台能力校验。
+- `backend/app/collectors/config.py`：Provider 顺序、超时、有限重试和 stale 策略。
+- `backend/app/collectors/hotspot.py`：Collector V2 编排，不含平台解析、数据库实现或业务分析。
+
+Collector 配置沿用现有通用后台 settings API，可写入以下字符串键：
+
+- `hotspot_collector_timeout_seconds`
+- `hotspot_collector_max_retries_per_provider`，限制为 0 到 3
+- `hotspot_collector_allow_stale`
+- `hotspot_provider_order_<platform>`，值为逗号分隔 Provider ID
+
+Phase 1 不预置任何 Provider 顺序，防止在 Phase 2 真实契约测试前把候选来源误标为可用。
 
 `ProviderResult` 必须明确表达：
 

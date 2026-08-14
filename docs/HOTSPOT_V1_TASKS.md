@@ -13,7 +13,7 @@
 | Phase | 名称 | 状态 | 完成门禁 |
 | --- | --- | --- | --- |
 | 0 | 项目审计与架构整理 | 已完成 | 文档校验、基线测试、独立 commit |
-| 1 | Collector V2 | 未开始 | 合同/编排/fallback 单元与集成测试 |
+| 1 | Collector V2 | 已完成 | 合同/编排/fallback 单元与集成测试 |
 | 2 | 四平台数据接入 | 未开始 | 四平台真实契约测试与失败证据 |
 | 3 | 30 分钟历史快照 | 未开始 | 迁移、幂等、窗口和恢复测试 |
 | 4 | 热点标准化与基础去重 | 未开始 | 规则、Unicode、URL、回放测试 |
@@ -85,14 +85,54 @@ Phase 1 只实现 Collector V2，不接四平台生产 Provider：
 
 ## Phase 1：Collector V2
 
-- [ ] 定义 `Platform`、`CollectRequest`、`ProviderResult`、`CollectorResult`。
-- [ ] 定义 `HotspotProvider` 协议和 health contract。
-- [ ] 实现 Provider registry 与按平台配置的优先级。
-- [ ] 实现超时、错误分类、有限重试和 fallback。
-- [ ] 实现 fresh/stale 读取规则，禁止伪造实时数据。
-- [ ] 定义原始数据写入端口，不在 Collector 内实现业务聚类。
-- [ ] 添加配置模型和后台配置兼容入口。
-- [ ] 完成单元/集成测试、任务文档更新和独立 commit。
+- [x] 定义 `Platform`、`CollectRequest`、`ProviderResult`、`CollectorResult`。
+- [x] 定义 `HotspotProvider` 协议和 health contract。
+- [x] 实现 Provider registry 与按平台配置的优先级。
+- [x] 实现超时、错误分类、有限重试和 fallback。
+- [x] 实现 fresh/stale 读取规则，禁止伪造实时数据。
+- [x] 定义原始数据写入端口，不在 Collector 内实现业务聚类。
+- [x] 添加配置模型和后台配置兼容入口。
+- [x] 完成单元/集成测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 四个平台已成为独立业务枚举，Provider ID 不再冒充平台。
+- Provider 注册表按配置顺序解析并验证平台能力，重复、缺失或不支持的 Provider 会形成明确配置失败。
+- Collector 实现逐 Provider 有界重试、超时隔离、错误分类和顺序 fallback。
+- fresh success 立即结束；fresh partial 仅在没有完整成功时使用；真实空榜 success 不触发 fallback。
+- 实时 Provider 全部失败后，只有显式允许且读取端口返回 `stale` 时才提供旧数据，并写入 `all_providers_failed` 原因。
+- 每次 Provider 尝试保留完整 `ProviderResult`、原始响应和错误；成功写入失败会向调用者传播，不会虚报采集成功。
+- Collector 只依赖 `RawCollectionWriter` 和 `StaleResultReader` 端口，未耦合数据库、标准化、聚类、报告或推送。
+- 后台通用 settings API 可承载 Provider 顺序、超时、0–3 次重试和 stale 策略；默认 Provider 列表保持为空。
+
+### 遗留问题
+
+- Phase 1 只定义写入/读取端口，数据库实现和 30 分钟快照留在 Phase 3。
+- 没有生产 Provider 被注册；四平台真实可用性必须在 Phase 2 验证后才能配置。
+- Provider 速率限制和认证错误的具体映射由各 Phase 2 adapter 负责。
+- Collector 尚未接入 Scheduler 或公开 API，避免在真实 Provider 和持久化实现完成前暴露半成品生产链路。
+
+### 测试证据
+
+- `pytest -W error::DeprecationWarning`：66 passed，其中 Collector V2 新增 22 项领域、配置、registry 和编排测试。
+- 覆盖 success、partial、failed、timeout、retry、fallback、stale、禁用 stale、真实空榜、Provider 身份错误、无配置及持久化失败。
+- `ruff check`：新增 Collector V2 源码和测试全部通过。
+- `ruff format --check`：13 个新增/相关文件均已格式化。
+- `python -m compileall`：新增模块全部通过。
+
+### 下一 Phase 计划
+
+Phase 2 仅做四平台 Provider 接入和真实合同验证：
+
+- 分别实现 NewsNow、DailyHotApi 和隔离的 OpenCLI adapter。
+- 为每个 Provider 保存真实响应契约、时间、状态、原始载荷和失败证据。
+- 基于真实结果确定 douyin/weibo/bilibili/xiaohongshu 的 Provider 顺序；不可用平台保持明确失败。
+- 增加 HTTP 超时、限流、认证失效、响应漂移、真实空榜和 fallback 契约测试。
+- 不提前创建快照表、聚类、Dashboard 或报告系统。
+
+### Commit
+
+本文件所在的 `feat(phase-1): add collector v2 provider contracts and fallback` 独立提交。
 
 ## Phase 2：四平台数据接入
 
