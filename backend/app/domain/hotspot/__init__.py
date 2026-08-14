@@ -1,5 +1,15 @@
 """Hotspot collection domain contracts."""
 
+from .clustering import (
+    CandidateDecision,
+    ClusterCandidate,
+    ClusteringBatch,
+    ClusteringStatus,
+    ClusterInputItem,
+    EventCluster,
+    EventMember,
+    SemanticStatus,
+)
 from .models import (
     CollectionStatus,
     CollectorResult,
@@ -29,11 +39,18 @@ from .normalization import (
 from .window import SnapshotWindow, snapshot_window_for
 
 __all__ = [
+    "CandidateDecision",
+    "ClusterCandidate",
+    "ClusterInputItem",
+    "ClusteringBatch",
+    "ClusteringStatus",
     "CollectRequest",
     "CollectionStatus",
     "CollectorResult",
     "DedupGroup",
     "DedupMember",
+    "EventCluster",
+    "EventMember",
     "Freshness",
     "NormalizationBatch",
     "NormalizationStatus",
@@ -49,6 +66,7 @@ __all__ = [
     "ProviderStatus",
     "PublishedAtPrecision",
     "RawHotItem",
+    "SemanticStatus",
     "SnapshotRawItem",
     "SnapshotWindow",
     "snapshot_window_for",

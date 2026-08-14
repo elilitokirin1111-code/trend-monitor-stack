@@ -38,15 +38,43 @@ class _FakeNormalizationService:
         return ()
 
 
+class _FakeClusteringService:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def process_current(self):
+        self.calls += 1
+        return type(
+            "Outcome",
+            (),
+            {
+                "state": "no_input",
+                "clustering_run_id": None,
+                "status": None,
+                "input_group_count": 0,
+                "candidate_pair_count": 0,
+                "event_count": 0,
+                "semantic_call_count": 0,
+                "error": None,
+            },
+        )()
+
+
 def test_scheduler_registers_single_instance_thirty_minute_job(monkeypatch) -> None:
     fake_hotspot = _FakeHotspotService()
     fake_normalization = _FakeNormalizationService()
+    fake_clustering = _FakeClusteringService()
     monkeypatch.setattr(scheduler_module, "db", _FakeDatabase())
     monkeypatch.setattr(scheduler_module, "hotspot_collection_service", fake_hotspot)
     monkeypatch.setattr(
         scheduler_module,
         "hotspot_normalization_service",
         fake_normalization,
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "hotspot_clustering_service",
+        fake_clustering,
     )
     service = scheduler_module.SchedulerService()
 
@@ -67,14 +95,21 @@ def test_scheduler_registers_single_instance_thirty_minute_job(monkeypatch) -> N
 def test_manual_trigger_uses_same_hotspot_job(monkeypatch) -> None:
     fake_hotspot = _FakeHotspotService()
     fake_normalization = _FakeNormalizationService()
+    fake_clustering = _FakeClusteringService()
     monkeypatch.setattr(scheduler_module, "hotspot_collection_service", fake_hotspot)
     monkeypatch.setattr(
         scheduler_module,
         "hotspot_normalization_service",
         fake_normalization,
     )
+    monkeypatch.setattr(
+        scheduler_module,
+        "hotspot_clustering_service",
+        fake_clustering,
+    )
     service = scheduler_module.SchedulerService()
 
     assert asyncio.run(service.trigger_hotspot_collection()) == ()
     assert fake_hotspot.calls == 1
     assert fake_normalization.calls == 1
+    assert fake_clustering.calls == 1

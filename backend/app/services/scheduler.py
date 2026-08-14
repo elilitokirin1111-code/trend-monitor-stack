@@ -4,23 +4,25 @@
 支持定时摘要功能
 """
 import json
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
 from app.config import settings
-from app.services.rss_fetcher import rss_fetcher
-from app.services.push_service import push_service
-from app.services.database import db
-from app.models.schemas import PushMessage, HotItem
-from app.utils.sources import HOT_SOURCES
-from app.services.config_service import config_service
+from app.models.schemas import HotItem, PushMessage
 from app.services.ai_service import ai_service
+from app.services.config_service import config_service
+from app.services.database import db
+from app.services.hotspot_clustering import hotspot_clustering_service
 from app.services.hotspot_collection import hotspot_collection_service
 from app.services.hotspot_normalization import hotspot_normalization_service
+from app.services.push_service import push_service
+from app.services.rss_fetcher import rss_fetcher
 from app.utils.logger import logger
-
+from app.utils.sources import HOT_SOURCES
 
 # 默认摘要配置
 DEFAULT_DIGEST_CONFIG = {
@@ -45,6 +47,7 @@ class SchedulerService:
         self._last_hotspot_run = None
         self._last_hotspot_result = None
         self._last_normalization_result = None
+        self._last_clustering_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
@@ -74,6 +77,7 @@ class SchedulerService:
                 else None,
                 "last_run_result": self._last_hotspot_result,
                 "last_normalization_result": self._last_normalization_result,
+                "last_clustering_result": self._last_clustering_result,
             },
         }
 
@@ -348,7 +352,6 @@ class SchedulerService:
 
             # 获取自定义数据源
             custom_sources = db.get_all_custom_sources()
-            custom_source_ids = [s["id"] for s in custom_sources if s["enabled"]]
 
             # 确定要抓取的内置数据源
             builtin_source_ids = list(HOT_SOURCES.keys())
@@ -356,9 +359,6 @@ class SchedulerService:
                 # 用户已配置数据源过滤，只抓取选中的内置源
                 builtin_source_ids = [s for s in builtin_source_ids if s in push_source_filter]
                 logger.info(f"推送数据源过滤：已选中 {len(builtin_source_ids)} 个内置源")
-
-            # 合并内置和自定义数据源
-            all_source_ids = builtin_source_ids + custom_source_ids
 
             # 抓取选中的热榜
             hot_lists = await rss_fetcher.fetch_all_hot_lists(source_ids=builtin_source_ids)
@@ -538,6 +538,7 @@ class SchedulerService:
         """采集四平台窗口数据；失败只记录，不生成伪造快照。"""
         self._last_hotspot_run = datetime.now(timezone.utc)
         self._last_normalization_result = None
+        self._last_clustering_result = None
         try:
             outcomes = await hotspot_collection_service.collect_all()
             self._last_hotspot_result = [
@@ -550,7 +551,9 @@ class SchedulerService:
                 }
                 for outcome in outcomes
             ]
-            normalization_outcomes = await hotspot_normalization_service.process_pending()
+            normalization_outcomes = (
+                await hotspot_normalization_service.process_pending()
+            )
             self._last_normalization_result = [
                 {
                     "snapshot_id": outcome.snapshot_id,
@@ -563,6 +566,21 @@ class SchedulerService:
                 }
                 for outcome in normalization_outcomes
             ]
+            clustering_outcome = await hotspot_clustering_service.process_current()
+            self._last_clustering_result = {
+                "state": clustering_outcome.state,
+                "clustering_run_id": clustering_outcome.clustering_run_id,
+                "status": (
+                    clustering_outcome.status.value
+                    if clustering_outcome.status
+                    else None
+                ),
+                "input_group_count": clustering_outcome.input_group_count,
+                "candidate_pair_count": clustering_outcome.candidate_pair_count,
+                "event_count": clustering_outcome.event_count,
+                "semantic_call_count": clustering_outcome.semantic_call_count,
+                "error": clustering_outcome.error,
+            }
             return outcomes
         except Exception as e:
             self._last_hotspot_result = {"error": str(e)}

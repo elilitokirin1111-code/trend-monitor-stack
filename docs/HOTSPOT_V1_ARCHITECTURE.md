@@ -190,8 +190,10 @@ Phase 3 已将原始层实体落为 `hotspot_*` 独立表；后续派生层仍�
 | `hotspot_normalized_items` | 标准标题、URL、数值热度、时间精度、warning 等派生字段 |
 | `hotspot_dedup_groups` | 快照内低误判的确定性去重结果和代表项 |
 | `hotspot_dedup_members` | 去重成员、匹配类型、对象和哈希证据 |
-| `events` | 跨平台热点事件主记录 |
-| `event_members` | 事件与规范化条目的成员关系和匹配证据 |
+| `hotspot_clustering_runs` | 聚类输入哈希、算法/配置版本、窗口、状态和规模计数 |
+| `hotspot_cluster_candidates` | 有界召回原因、确定性分数、语义边界状态和最终决策 |
+| `hotspot_events` | 某次版本化聚类运行产出的跨平台热点事件 |
+| `hotspot_event_members` | 事件与 Phase 4 去重组代表项的成员关系 |
 | `trend_states` | 事件在各时间窗的生命周期、速度、加速度和评分 |
 | `ai_classifications` | 分类、酒旅相关性、摘要、模型/提示词版本与证据 |
 | `reports` | 日报/周报内容、版本、时间窗和生成状态 |
@@ -224,6 +226,10 @@ Phase 4 只做低风险规则：同平台稳定外部 ID、canonical URL、严�
 - AI 只能判断模糊边界，不能覆盖确定性冲突事实。
 - 算法、阈值和特征权重全部配置化、版本化。
 - 支持离线重放原始数据并比较聚类版本。
+
+Phase 5 已采用字符 n-gram 倒排表和关键词特征落地有界召回：每个倒排键限制 posting 数，每个输入限制候选数，因此候选对最多为 `输入数 × max_candidates_per_item`，不会枚举全量组合。精确标题或 canonical URL 直接进入确定性高置信路径；其余候选按标题序列、n-gram、关键词和时间相似度加权。只有 `[semantic_lower_threshold, accept_threshold)` 灰区且显式开启语义端口时才会调用 AI。
+
+语义端口未配置、调用超时、结果类型非法或预算耗尽时，候选保守拒绝并记录 `unavailable/error/invalid/budget_exhausted`；不得用模型失败制造事件合并。默认不启用语义端口，Phase 5 也不接入分类或摘要模型。
 
 ## 8. 趋势生命周期
 
@@ -336,7 +342,7 @@ backend/app/collectors/                 Collector V2 编排与 fallback
 backend/app/providers/                  Provider 合同、registry、各数据源 adapter
 backend/app/repositories/hotspot/       原始与派生数据访问
 backend/app/services/normalization/     标准化和确定性去重
-backend/app/services/clustering/        候选生成、事件聚类
+backend/app/clustering/                 候选召回、确定性评分、语义边界端口和事件聚类
 backend/app/services/trends/            生命周期和评分
 backend/app/services/classification/    AI 分类边界
 backend/app/services/reports/           日报/周报
@@ -409,6 +415,24 @@ Phase 4 只消费 fresh `hotspot_snapshots` 的成员，不扫描未获选 Provi
 - 每个非失败标准化项恰好属于一个去重组，包括单例组；代表项与所有成员证据均受领域合同和数据库外键约束。
 
 本阶段的去重组不是跨平台事件。Phase 5 只能读取版本化标准化/去重结果建立有界候选集，不能直接修改 Phase 4 记录或回退到全量 LLM 两两比较。
+
+## 19. Phase 5 跨平台事件聚类实现
+
+Phase 5 只读取与当前 `NormalizationRules` 版本、配置哈希完全匹配的 `hotspot_dedup_groups` 代表项。输入窗口以该版本最新真实 `observed_at` 为锚，默认回看 48 小时；这使旧快照可以离线回放，也避免用当前墙上时间误删历史输入。聚类不会重新扫描 Phase 3 raw item，也不会修改 Phase 4 派生记录。
+
+候选与决策边界：
+
+- 默认候选时间窗 36 小时、每条最多 20 个候选、每个倒排键最多保留 200 个 posting；以上参数均可通过现有 settings API 修改并进入稳定配置哈希。
+- 候选由严格标题、canonical URL 和字符 n-gram 倒排召回；同一 Phase 4 快照内的条目不重复聚类。
+- 确定性分数默认由标题序列 0.45、n-gram 0.35、关键词 0.15、时间 0.05 加权，默认灰区下界 0.68、自动接受阈值 0.82。
+- 直接接受、直接拒绝、语义接受/拒绝和降级拒绝均保存原因、分数组件与可选模型证据；并查集只连接明确接受的边。
+- 每个输入去重组恰好属于一个事件，包括单例；事件标题仅取确定性代表项，不由 AI 生成。
+
+运行采用 `algorithm_version + config_hash + normalization_config_hash + input_hash` 幂等。同一输入和配置重跑跳过；配置或输入变化会追加新的 `hotspot_clustering_runs`、事件、成员和候选证据，旧运行保持可审计。Scheduler 在标准化后调用独立 `HotspotClusteringService`，聚类失败只记录明确失败结果，不伪造事件，也不阻断后续窗口重试。
+
+Phase 5 未实现跨运行稳定事件 ID 或趋势生命周期；当前 event ID 隶属于某次版本化聚类运行。Phase 6 应消费连续运行的事件成员与窗口观测，建立生命周期状态和跨运行关联，不得回写 Phase 5 历史结果。
+
+## 20. Provider Freshness 保守证据补充
 
 Freshness 采用保守证据规则：
 

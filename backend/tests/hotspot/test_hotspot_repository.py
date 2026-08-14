@@ -116,7 +116,7 @@ def test_migration_is_versioned_and_idempotent(tmp_path: Path) -> None:
     database = _database(tmp_path)
     runner = HotspotMigrationRunner(database)
 
-    assert runner.apply() == (1, 2)
+    assert runner.apply() == (1, 2, 3)
     assert runner.apply() == ()
 
     with database.get_connection() as connection:
@@ -126,6 +126,7 @@ def test_migration_is_versioned_and_idempotent(tmp_path: Path) -> None:
     assert [tuple(row) for row in rows] == [
         (1, "initial", 64),
         (2, "normalization", 64),
+        (3, "event_clustering", 64),
     ]
 
 
