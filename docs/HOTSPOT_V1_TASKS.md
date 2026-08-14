@@ -204,6 +204,7 @@ Phase 3 只实现 30 分钟历史快照和原始数据持久化：
 - 定时与手动触发共用 `HotspotCollectionService.collect_all`；任务启用 `max_instances=1`、`coalesce=True` 和有限 misfire grace time。
 - 实时失败会保存运行/尝试/原始错误，不生成快照；stale Provider 或历史快照回退会明确标记 `stale`，且不会制造新的实时窗口观测。
 - 最新历史快照实现 `StaleResultReader`，只有含真实成员的既有快照可作为回退数据。
+- 修补 Phase 0 升级 Vite 8 后遗漏的 CI 运行时：GitHub Actions 前端门禁由不兼容的 Node 18 升级到 Node 22。
 
 ### 遗留问题
 
@@ -218,6 +219,7 @@ Phase 3 只实现 30 分钟历史快照和原始数据持久化：
 - 覆盖迁移幂等与失败恢复、同 run/同窗口幂等、原始字节与哈希、失败无快照、stale 不造新快照、历史 stale 读取、锁所有权/过期恢复、已有窗口跳过、30 分钟单实例任务和手动同入口。
 - `ruff check` 与 `ruff format --check`：Collector V2、Provider、Phase 3 仓储/服务及全部热点测试通过。
 - `python -m compileall`：后端应用通过；前端生产构建和依赖审计通过。
+- GitHub Actions：后端测试与 Node 22 前端构建门禁通过。
 
 ### 下一 Phase 计划
 
