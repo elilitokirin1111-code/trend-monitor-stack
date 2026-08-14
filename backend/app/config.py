@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # 抓取配置
     fetch_interval_minutes: int = 5  # 抓取间隔（分钟）
+    hotspot_collection_interval_minutes: int = 30  # V2 热点快照间隔（分钟）
     fetch_timeout: int = 30  # 请求超时（秒）
     fetch_retry_count: int = 2  # 失败重试次数
 

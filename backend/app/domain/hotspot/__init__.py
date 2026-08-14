@@ -17,6 +17,7 @@ from .models import (
     RawHotItem,
     utc_now,
 )
+from .window import SnapshotWindow, snapshot_window_for
 
 __all__ = [
     "CollectRequest",
@@ -33,5 +34,7 @@ __all__ = [
     "ProviderResult",
     "ProviderStatus",
     "RawHotItem",
+    "SnapshotWindow",
+    "snapshot_window_for",
     "utc_now",
 ]

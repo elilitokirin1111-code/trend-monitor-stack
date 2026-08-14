@@ -15,7 +15,7 @@
 | 0 | 项目审计与架构整理 | 已完成 | 文档校验、基线测试、独立 commit |
 | 1 | Collector V2 | 已完成 | 合同/编排/fallback 单元与集成测试 |
 | 2 | 四平台数据接入 | 已完成（外部可用性受限） | 四平台真实契约测试与失败证据 |
-| 3 | 30 分钟历史快照 | 未开始 | 迁移、幂等、窗口和恢复测试 |
+| 3 | 30 分钟历史快照 | 已完成 | 迁移、幂等、窗口和恢复测试 |
 | 4 | 热点标准化与基础去重 | 未开始 | 规则、Unicode、URL、回放测试 |
 | 5 | 跨平台事件聚类 | 未开始 | 候选召回、边界、规模测试 |
 | 6 | 趋势生命周期引擎 | 未开始 | 状态机、配置、时间序列测试 |
@@ -186,13 +186,52 @@ Phase 3 只实现 30 分钟历史快照和原始数据持久化：
 
 ## Phase 3：30 分钟历史快照
 
-- [ ] 引入版本化数据库迁移。
-- [ ] 新增采集运行、Provider 尝试、原始载荷、原始热点、快照及成员表。
-- [ ] 默认采集间隔设为 30 分钟并允许后台配置。
-- [ ] 实现窗口幂等、多实例锁、misfire/coalesce。
-- [ ] 保证所有原始数据 append-only 保存。
-- [ ] 实现 stale 快照读取语义。
-- [ ] 完成迁移/幂等/恢复测试、任务文档更新和独立 commit。
+- [x] 引入版本化数据库迁移。
+- [x] 新增采集运行、Provider 尝试、原始载荷、原始热点、快照及成员表。
+- [x] 默认采集间隔设为 30 分钟并允许后台配置。
+- [x] 实现窗口幂等、多实例锁、misfire/coalesce。
+- [x] 保证所有原始数据 append-only 保存。
+- [x] 实现 stale 快照读取语义。
+- [x] 完成迁移/幂等/恢复测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 新增 SQLite/MySQL 双方言、带 SHA-256 漂移检测的 `hotspot_schema_migrations` 迁移体系；V1 新表使用 `hotspot_*` 前缀，与 HotPush 旧表隔离。
+- 新增采集运行、Provider 尝试、原始 payload、原始热点、历史快照、快照成员和窗口锁表；运行、尝试和原始证据只追加，不受旧快照 7 天清理任务影响。
+- 原始响应按字节保存并记录 SHA-256；未获选 Provider 的尝试、错误和可用条目同样保存，便于回放与审计。
+- 30 分钟窗口按 UTC 半开区间确定；`platform + window_start` 唯一约束、数据库锁和写入时二次检查共同保证多实例幂等。
+- Collector V2 已接入独立 `hotspot_collect_v2` APScheduler 任务，默认 30 分钟，设置键为 `hotspot_collection_interval_minutes`，后台配置合法范围为 1–1440 分钟。
+- 定时与手动触发共用 `HotspotCollectionService.collect_all`；任务启用 `max_instances=1`、`coalesce=True` 和有限 misfire grace time。
+- 实时失败会保存运行/尝试/原始错误，不生成快照；stale Provider 或历史快照回退会明确标记 `stale`，且不会制造新的实时窗口观测。
+- 最新历史快照实现 `StaleResultReader`，只有含真实成员的既有快照可作为回退数据。
+
+### 遗留问题
+
+- MySQL 迁移 SQL 已实现并通过静态/编译检查，但当前开发环境没有独立 MySQL 测试实例；部署前仍需在与生产一致的 MySQL 版本执行迁移演练和备份恢复验证。
+- 四平台公网 Provider 仍受 Phase 2 记录的外部 403、DNS、502 和 Browser Bridge 状态限制；Scheduler 会记录真实失败，不会补入演示数据。
+- 本阶段只保存 Raw 与 Snapshot；尚未生成规范化条目、单平台去重或跨平台事件。
+- 原始层按产品原则永久保留；压缩、对象存储归档与容量告警留到 Phase 11，但不得静默删除原始证据。
+
+### 测试证据
+
+- `pytest -W error::DeprecationWarning`：105 passed；Phase 3 新增 16 项窗口、迁移、仓储、锁、恢复、服务和 Scheduler 测试。
+- 覆盖迁移幂等与失败恢复、同 run/同窗口幂等、原始字节与哈希、失败无快照、stale 不造新快照、历史 stale 读取、锁所有权/过期恢复、已有窗口跳过、30 分钟单实例任务和手动同入口。
+- `ruff check` 与 `ruff format --check`：Collector V2、Provider、Phase 3 仓储/服务及全部热点测试通过。
+- `python -m compileall`：后端应用通过；前端生产构建和依赖审计通过。
+
+### 下一 Phase 计划
+
+Phase 4 只实现热点标准化与基础去重：
+
+- 新增版本化派生表，保存规范化规则版本、输入 raw ID 和失败原因。
+- 实现 Unicode、空白、标点、标题和 URL 的确定性规范化。
+- 实现平台热度单位与时间字段解析，解析失败不删除原始记录。
+- 按外部 ID、canonical URL 和严格标题指纹做基础去重并保存匹配证据。
+- 使用 Phase 3 原始记录回放测试；不提前实现跨平台事件聚类、LLM 比较或 Dashboard。
+
+### Commit
+
+本节随 `feat(phase-3): persist idempotent hotspot snapshots` 独立提交。
 
 ## Phase 4：热点标准化与基础去重
 

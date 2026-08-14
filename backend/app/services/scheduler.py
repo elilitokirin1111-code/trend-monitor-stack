@@ -7,7 +7,7 @@ import json
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from app.config import settings
 from app.services.rss_fetcher import rss_fetcher
@@ -17,6 +17,7 @@ from app.models.schemas import PushMessage, HotItem
 from app.utils.sources import HOT_SOURCES
 from app.services.config_service import config_service
 from app.services.ai_service import ai_service
+from app.services.hotspot_collection import hotspot_collection_service
 from app.utils.logger import logger
 
 
@@ -40,10 +41,13 @@ class SchedulerService:
         self._last_run_result = None
         self._last_digest_run = None
         self._last_digest_result = None
+        self._last_hotspot_run = None
+        self._last_hotspot_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
         job = self.scheduler.get_job("fetch_and_push")
+        hotspot_job = self.scheduler.get_job("hotspot_collect_v2")
 
         # 从数据库读取配置
         interval = self._get_interval()
@@ -57,7 +61,17 @@ class SchedulerService:
             "interval_minutes": interval,
             "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None,
             "last_run": self._last_run.isoformat() if self._last_run else None,
-            "last_run_result": self._last_run_result
+            "last_run_result": self._last_run_result,
+            "hotspot_v2": {
+                "interval_minutes": self._get_hotspot_interval(),
+                "next_run": hotspot_job.next_run_time.isoformat()
+                if hotspot_job and hotspot_job.next_run_time
+                else None,
+                "last_run": self._last_hotspot_run.isoformat()
+                if self._last_hotspot_run
+                else None,
+                "last_run_result": self._last_hotspot_result,
+            },
         }
 
     def _get_interval(self) -> int:
@@ -80,25 +94,45 @@ class SchedulerService:
             )
             logger.info(f"抓取间隔已更新为 {minutes} 分钟")
 
+    def _get_hotspot_interval(self) -> int:
+        """获取 Collector V2 历史快照间隔。"""
+        return hotspot_collection_service.get_interval_minutes()
+
+    def update_hotspot_interval(self, minutes: int):
+        """动态更新 Collector V2 任务间隔。"""
+        job = self.scheduler.get_job("hotspot_collect_v2")
+        if job:
+            self.scheduler.reschedule_job(
+                "hotspot_collect_v2",
+                trigger=IntervalTrigger(minutes=minutes),
+            )
+            logger.info(f"Collector V2 抓取间隔已更新为 {minutes} 分钟")
+
     def pause(self):
         """暂停调度器"""
-        job = self.scheduler.get_job("fetch_and_push")
-        if job:
-            job.pause()
-            self._is_paused = True
-            logger.info("调度器已暂停")
+        for job_id in ("fetch_and_push", "hotspot_collect_v2"):
+            job = self.scheduler.get_job(job_id)
+            if job:
+                job.pause()
+        self._is_paused = True
+        logger.info("调度器已暂停")
 
     def resume(self):
         """恢复调度器"""
-        job = self.scheduler.get_job("fetch_and_push")
-        if job:
-            job.resume()
-            self._is_paused = False
-            logger.info("调度器已恢复")
+        for job_id in ("fetch_and_push", "hotspot_collect_v2"):
+            job = self.scheduler.get_job(job_id)
+            if job:
+                job.resume()
+        self._is_paused = False
+        logger.info("调度器已恢复")
 
     async def trigger_fetch(self):
         """手动触发一次抓取"""
         await self._fetch_and_push_job()
+
+    async def trigger_hotspot_collection(self):
+        """手动触发与定时任务完全相同的 Collector V2 入口。"""
+        return await self._hotspot_collection_job()
 
     # ===== 定时摘要相关方法 =====
 
@@ -497,9 +531,32 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"快照清理失败: {e}")
 
+    async def _hotspot_collection_job(self):
+        """采集四平台窗口数据；失败只记录，不生成伪造快照。"""
+        self._last_hotspot_run = datetime.now(timezone.utc)
+        try:
+            outcomes = await hotspot_collection_service.collect_all()
+            self._last_hotspot_result = [
+                {
+                    "platform": outcome.platform.value,
+                    "window_start": outcome.window.start.isoformat(),
+                    "state": outcome.state,
+                    "run_id": outcome.run_id,
+                    "error_code": outcome.error_code,
+                }
+                for outcome in outcomes
+            ]
+            return outcomes
+        except Exception as e:
+            self._last_hotspot_result = {"error": str(e)}
+            logger.error(f"Collector V2 抓取失败: {e}")
+            raise
+
     def start(self):
         """启动定时任务"""
         interval = self._get_interval()
+        hotspot_interval = self._get_hotspot_interval()
+        hotspot_collection_service.initialize_storage()
 
         # 检查是否应该启用
         enabled_setting = db.get_setting("scheduler_enabled")
@@ -513,6 +570,17 @@ class SchedulerService:
             id="fetch_and_push",
             name="抓取热榜并推送",
             replace_existing=True
+        )
+
+        self.scheduler.add_job(
+            self._hotspot_collection_job,
+            trigger=IntervalTrigger(minutes=hotspot_interval),
+            id="hotspot_collect_v2",
+            name="Collector V2 四平台历史快照",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=max(60, min(hotspot_interval * 60, 3600)),
         )
 
         # 每日清理旧快照数据

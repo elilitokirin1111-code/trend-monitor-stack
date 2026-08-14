@@ -18,6 +18,7 @@ router = APIRouter()
 class SchedulerConfigUpdate(BaseModel):
     """更新调度器配置"""
     fetch_interval: Optional[int] = None  # 抓取间隔（分钟）
+    hotspot_collection_interval: Optional[int] = None  # V2 快照间隔（分钟）
     enabled: Optional[bool] = None
 
 
@@ -47,6 +48,27 @@ async def trigger_fetch(_: dict = Depends(require_admin)):
         raise HTTPException(status_code=500, detail=f"触发失败: {str(e)}")
 
 
+@router.post("/hotspots/trigger")
+async def trigger_hotspot_collection(_: dict = Depends(require_admin)):
+    """手动触发 Collector V2 四平台采集。"""
+    try:
+        outcomes = await scheduler_service.trigger_hotspot_collection()
+        return {
+            "success": True,
+            "results": [
+                {
+                    "platform": outcome.platform.value,
+                    "state": outcome.state,
+                    "run_id": outcome.run_id,
+                    "error_code": outcome.error_code,
+                }
+                for outcome in outcomes
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"触发失败: {str(e)}")
+
+
 @router.put("/config")
 async def update_scheduler_config(
     config: SchedulerConfigUpdate,
@@ -58,6 +80,13 @@ async def update_scheduler_config(
             raise HTTPException(status_code=400, detail="抓取间隔必须在 1-1440 分钟之间")
         db.set_setting("fetch_interval", str(config.fetch_interval))
         scheduler_service.update_interval(config.fetch_interval)
+
+    if config.hotspot_collection_interval is not None:
+        interval = config.hotspot_collection_interval
+        if interval < 1 or interval > 1440:
+            raise HTTPException(status_code=400, detail="V2 抓取间隔必须在 1-1440 分钟之间")
+        db.set_setting("hotspot_collection_interval_minutes", str(interval))
+        scheduler_service.update_hotspot_interval(interval)
 
     if config.enabled is not None:
         db.set_setting("scheduler_enabled", "1" if config.enabled else "0")

@@ -176,16 +176,16 @@ HotPush 当前通过 `database.py` 为 SQLite/MySQL 创建以下 9 张表：
 
 ### 6.2 V1 新实体
 
-命名可在 Phase 1/3 的迁移设计中调整，但语义不能合并：
+Phase 3 已将原始层实体落为 `hotspot_*` 独立表；后续派生层仍不得与原始层合并：
 
 | 实体 | 核心职责 |
 | --- | --- |
-| `collector_runs` | 一次平台采集运行的窗口、状态、耗时、最终 freshness |
-| `provider_attempts` | 每次 Provider 尝试、顺序、错误、状态码、重试信息 |
-| `raw_payloads` | 原始响应正文或对象存储引用、哈希、媒体类型 |
-| `raw_hot_items` | 不可变原始热点；保留 Provider 原字段和原始载荷引用 |
-| `snapshots` | 平台在 30 分钟窗口的一次观测 |
-| `snapshot_items` | 快照与原始条目的成员关系及当次排名/热度 |
+| `hotspot_collection_runs` | 一次平台采集运行的窗口、状态、耗时、最终 freshness |
+| `hotspot_provider_attempts` | 每次 Provider 尝试、顺序、错误、状态码、重试信息 |
+| `hotspot_raw_payloads` | 原始响应正文、SHA-256 和媒体类型 |
+| `hotspot_raw_items` | 不可变原始热点；保留 Provider 原字段和原始载荷哈希 |
+| `hotspot_snapshots` | 平台在 30 分钟窗口的一次 fresh 观测 |
+| `hotspot_snapshot_members` | 快照与原始条目的成员关系及当次顺序 |
 | `normalized_hot_items` | 标准标题、URL、数值热度、时间、语言等派生字段 |
 | `dedup_groups` | 单平台/同 Provider 的确定性去重结果 |
 | `events` | 跨平台热点事件主记录 |
@@ -256,7 +256,7 @@ AI 输出必须结构化校验，并记录输入引用、模型、提示词版�
 - 配置：`/api/config/settings`、`/api/config/push*`、`/api/config/push-sources`。
 - 数据源：`/api/sources/custom*`、`/api/sources/validate`。
 - 规则/历史：`/api/rules*`、`/api/history*`。
-- 调度：`/api/scheduler/status|trigger|config|pause|resume|digest*|ai-config`。
+- 调度：`/api/scheduler/status|trigger|hotspots/trigger|config|pause|resume|digest*|ai-config`；`config` 已支持独立 V2 快照频率。
 - 趋势：`/api/trends/ranking/{source_id}`、`/item/{item_id}`、`/overview`、`/top`。
 - 用户：`/api/users*`。
 
@@ -283,7 +283,7 @@ API 响应 freshness 最低要求：
 
 ## 11. Scheduler 基线与演进
 
-HotPush 使用 APScheduler：一个间隔任务执行抓取和推送；摘要任务可配置；每日 03:00 清理旧快照。Compose 当前默认 `FETCH_INTERVAL_MINUTES=5`。
+HotPush 使用 APScheduler：一个间隔任务执行抓取和推送；摘要任务可配置；每日 03:00 清理旧快照。该兼容任务仍使用 `FETCH_INTERVAL_MINUTES=5`。Phase 3 新增独立 `hotspot_collect_v2` 任务，默认 `HOTSPOT_COLLECTION_INTERVAL_MINUTES=30`，避免改变旧推送语义。
 
 V1 要求：
 
@@ -378,6 +378,20 @@ Provider 默认顺序可以由现有后台 settings 形状覆盖：
 - `hotspot_dailyhotapi_base_url`：DailyHotApi 公共或自建地址。
 - `hotspot_opencli_executable`：外置 OpenCLI 可执行文件路径；不通过 shell 执行。
 - `hotspot_opencli_limit`：单次获取上限，合法范围 1–100。
+
+## 17. Phase 3 快照持久化实现
+
+Phase 3 在 Collector 端口之后新增 `HotspotRepository`，不改变 Provider 或 Collector 对数据库的认知。每次 Provider 尝试先保存运行、错误、原始响应字节、SHA-256 和原始条目，再决定是否创建窗口快照。
+
+快照规则：
+
+- 窗口为 UTC 半开区间 `[start, end)`，默认 30 分钟，设置键 `hotspot_collection_interval_minutes` 可在后台调整为 1–1440 分钟。
+- 只有 `fresh` 且非失败的 Collector 结果创建 `hotspot_snapshots`；真实空榜允许创建零成员快照，表示该窗口已成功观测为空。
+- `stale` 回退只记录本次运行和实际 Provider 尝试，不复制历史成员形成新快照；历史数据通过原快照 ID 返回并明确标记 `stale`。
+- 所有运行和原始证据均保留；同一窗口发生额外采集时仍保存新的原始运行，但唯一窗口快照保持不变。
+- `hotspot_collection_locks` 是可过期、按 owner 释放的操作锁表，不属于 append-only 原始业务数据。
+
+Scheduler 保留 HotPush 原有 `fetch_and_push` 兼容任务，并新增 `hotspot_collect_v2`。两者频率分别配置；暂停/恢复会同时作用于两项任务，手动 V2 入口与定时任务调用同一个应用服务。V2 任务限制单实例执行并开启 coalesce/misfire 控制，数据库窗口锁负责跨进程互斥。
 
 Freshness 采用保守证据规则：
 
