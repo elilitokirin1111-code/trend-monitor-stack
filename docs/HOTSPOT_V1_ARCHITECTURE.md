@@ -358,3 +358,33 @@ config/hotspot/                          算法、阈值、权重配置
 6. 创建一个独立 Git commit。
 
 测试或真实数据验证未通过时，该 Phase 保持未完成；不得用 sample/fake/mock 数据对外冒充生产结果。
+
+## 16. Phase 2 Provider 实现
+
+Phase 2 只把外部数据转换为 `ProviderResult`，不写快照、不做标准化、聚类、趋势、AI、报表或推送。
+
+| 平台 | 默认 Provider 链 | 当前能力边界 |
+| --- | --- | --- |
+| douyin | `newsnow -> dailyhotapi` | 两个 HTTP 合同均实现；公开实例当前不可用时明确失败 |
+| weibo | `newsnow -> dailyhotapi` | 同上；HTTP 403/429/5xx 分开分类 |
+| bilibili | `newsnow -> dailyhotapi` | 同上；保留上游原始 item 和完整响应 |
+| xiaohongshu | `opencli` | 仅使用登录态首页推荐 feed；Browser Bridge/登录失效时失败，不伪装成热榜成功 |
+
+Provider 默认顺序可以由现有后台 settings 形状覆盖：
+
+- `hotspot_provider_order_<platform>`：逗号分隔 Provider ID。
+- `hotspot_newsnow_base_url`：NewsNow 公共或自建地址。
+- `hotspot_newsnow_trust_success_as_fresh`：默认 `false`。仅当管理员能证明自建实例不会返回缓存时开启。
+- `hotspot_dailyhotapi_base_url`：DailyHotApi 公共或自建地址。
+- `hotspot_opencli_executable`：外置 OpenCLI 可执行文件路径；不通过 shell 执行。
+- `hotspot_opencli_limit`：单次获取上限，合法范围 1–100。
+
+Freshness 采用保守证据规则：
+
+- NewsNow 的源码路径会在刷新间隔内从缓存返回 `status=success`，因此默认结果仍标记 `stale`；`status=cache` 必为 `stale`。
+- DailyHotApi 的 `fromCache=true` 必为 `stale`，`false` 才可为 `fresh`。
+- OpenCLI 只有进程成功、输出为合法 JSON 数组且条目合同有效时才为 `fresh`。
+- Provider 2xx 但响应缺字段、类型漂移或全部条目非法时为失败；部分非法时为 partial。
+- HTTP/CLI 失败的响应体也保留在 `ProviderResult.raw_payload`，但验证工具只输出长度和 SHA-256，不泄漏原文。
+
+公开 Provider 的在线可用性不作为代码成功的替代证据。2026-08-14 的真实验证结果记录在 `docs/evidence/PHASE_2_PROVIDER_VALIDATION_2026-08-14.md`；当时四个平台均未取得可证明的 live 数据，因此任何 Dashboard、报告或推送都不得把本阶段测试 fixture 当成生产热点。

@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | 0 | 项目审计与架构整理 | 已完成 | 文档校验、基线测试、独立 commit |
 | 1 | Collector V2 | 已完成 | 合同/编排/fallback 单元与集成测试 |
-| 2 | 四平台数据接入 | 未开始 | 四平台真实契约测试与失败证据 |
+| 2 | 四平台数据接入 | 已完成（外部可用性受限） | 四平台真实契约测试与失败证据 |
 | 3 | 30 分钟历史快照 | 未开始 | 迁移、幂等、窗口和恢复测试 |
 | 4 | 热点标准化与基础去重 | 未开始 | 规则、Unicode、URL、回放测试 |
 | 5 | 跨平台事件聚类 | 未开始 | 候选召回、边界、规模测试 |
@@ -136,13 +136,53 @@ Phase 2 仅做四平台 Provider 接入和真实合同验证：
 
 ## Phase 2：四平台数据接入
 
-- [ ] 接入 NewsNow Provider。
-- [ ] 接入 DailyHotApi Provider。
-- [ ] 接入 OpenCLI 进程隔离 Provider，仅用于需要登录态或特殊平台的备用链路。
-- [ ] 为 douyin/weibo/bilibili/xiaohongshu 配置可替换 Provider 链。
-- [ ] 保存每个平台真实响应和失败状态证据。
-- [ ] 验证空榜、限流、登录过期、响应变更和 fallback。
-- [ ] 完成契约/集成测试、任务文档更新和独立 commit。
+- [x] 接入 NewsNow Provider。
+- [x] 接入 DailyHotApi Provider。
+- [x] 接入 OpenCLI 进程隔离 Provider，仅用于需要登录态或特殊平台的备用链路。
+- [x] 为 douyin/weibo/bilibili/xiaohongshu 配置可替换 Provider 链。
+- [x] 保存每个平台真实响应和失败状态证据。
+- [x] 验证空榜、限流、登录过期、响应变更和 fallback。
+- [x] 完成契约/集成测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- NewsNow 与 DailyHotApi 以原创 HTTP adapter 接入 douyin、weibo、bilibili；上游源码、selector 和 fixture 未复制进仓库。
+- OpenCLI 以无 shell 的子进程参数向量接入 xiaohongshu feed；Collector 超时取消时会终止子进程，浏览器 cookie、token 和登录数据不写业务日志。
+- 默认链为前三平台 `newsnow -> dailyhotapi`、小红书 `opencli`；现有后台 settings 可以替换 Provider 顺序、两个 HTTP 基地址、OpenCLI 路径和 limit。
+- NewsNow 因 `status=success` 仍可能命中 interval cache，默认保守标记 `stale`；只有明确关闭缓存的自建实例才能通过配置声明 fresh。
+- DailyHotApi `fromCache=true` 映射为 `stale`；合法空数组是实时空榜，缺少数组或 schema 漂移是失败。
+- HTTP 401、403、429、5xx、网络失败、无效 JSON、部分非法条目、OpenCLI 登录失效和 Browser Bridge 不可用均有独立分类与测试。
+- 成功、partial 和失败结果均保留可用的原始响应；真实验证工具仅输出长度、SHA-256 和状态，不输出热点标题或敏感载荷。
+
+### 遗留问题
+
+- 2026-08-14 真实探测中，NewsNow 公共实例对当前出口返回 Cloudflare HTTP 403；DailyHotApi 公共 hostname 无法解析。
+- 未修改的 DailyHotApi 本机上游副本可启动，但 douyin、weibo、bilibili 路由访问各平台时均返回 HTTP 502。
+- 当前 OpenCLI 1.8.6 可执行，但 Chrome Browser Bridge 扩展未连接；小红书返回明确配置失败，未采到 live item。
+- 因四个平台本次都没有取得可证明的 live 数据，Phase 2 不提供演示榜单。生产部署前需要可用的自建 HTTP Provider 和已授权的 OpenCLI 浏览器会话。
+- Phase 2 仍未接数据库、Scheduler 或 API；这是 Phase 3 持久化门禁，不应在此阶段绕过。
+
+### 测试证据
+
+- `pytest -W error::DeprecationWarning`：89 passed；Phase 2 新增 23 项 Provider/配置/fallback 测试。
+- 覆盖 fresh/stale、真实空榜、partial、响应漂移、401/403/429/5xx、网络失败、fallback、登录失效、Bridge 失联和子进程取消清理。
+- `ruff check` 与 `ruff format --check`：Phase 2 源码、工具和测试通过。
+- `python -m compileall`、前端 Vite 8.2.1 生产构建通过；`npm audit` 为 0 vulnerabilities。
+- 真实调用与 payload hash：`docs/evidence/PHASE_2_PROVIDER_VALIDATION_2026-08-14.md`。
+
+### 下一 Phase 计划
+
+Phase 3 只实现 30 分钟历史快照和原始数据持久化：
+
+- 引入版本化数据库迁移和 append-only 原始载荷/原始热点表。
+- 增加采集运行、Provider 尝试、快照和快照成员表，原始与聚合数据继续分离。
+- 实现 30 分钟后台配置、窗口幂等键、多实例锁及 misfire/coalesce。
+- 将 Phase 2 Provider/Collector 接入持久化端口和 Scheduler，但不提前做标准化或聚类。
+- 完成迁移、幂等、窗口、并发和恢复测试后再提交。
+
+### Commit
+
+本节随 `feat(phase-2): integrate replaceable live hotspot providers` 独立提交。
 
 ## Phase 3：30 分钟历史快照
 

@@ -16,38 +16,52 @@ This register distinguishes incorporated software, planned runtime integrations,
 - Local notice: The upstream `LICENSE` file is retained at the repository root. Modified files remain subject to the MIT notice for substantial portions originating from HotPush.
 - Engineering note: Existing FastAPI, Vue, auth, settings, scheduler, cache, database, trend UI, push channel and Docker foundations are retained where suitable. New hotspot-domain code should be original and attributable through Git history.
 
-## 2. Planned Provider integrations
+## 2. Implemented Provider integrations
 
-These projects are approved candidates, but Phase 0 does not copy or integrate their source code.
+Phase 2 adds original, contract-level adapters for these projects. No upstream
+collector implementation, selector, fixture, test, or bundled binary is copied
+into this repository.
 
 ### NewsNow
 
 - Project: https://github.com/ourongxing/newsnow
 - Copyright: ourongxing and contributors
 - License: MIT License
-- Intended use: Hotspot data Provider for supported platforms.
-- Integration rule: Prefer a documented/self-hosted API contract or a small original adapter. Do not copy an entire source tree. If source snippets or substantial portions are incorporated later, record the exact commit, files and preserved MIT notice here.
-- Operational risk: Public instances may change, rate-limit or become unavailable. Availability must be established by Phase 2 real contract tests; failed collection must never be replaced with fabricated live data.
+- Contract reviewed at commit: `2173126f804bec0201769f59d933add6c4632d17`
+- Use: Outbound HTTP Provider for Douyin, Weibo and Bilibili via `/api/s`.
+- Local implementation: `backend/app/providers/hotspot/newsnow.py`; original adapter code only.
+- Copied upstream code: None.
+- Freshness rule: NewsNow can serve interval cache while reporting `status=success`; therefore results are conservatively `stale` unless an operator explicitly asserts that a self-hosted instance cannot serve cache.
+- Operational finding on 2026-08-14: The documented public instance returned Cloudflare HTTP 403 from this environment. This is retained as a failed Provider attempt, never live data.
 
 ### DailyHotApi
 
 - Project: https://github.com/imsyy/DailyHotApi
 - Copyright: imsyy and contributors
 - License: MIT License
-- Intended use: Primary or fallback hotspot data Provider. Its documented source list includes Bilibili, Weibo and Douyin.
-- Integration rule: Prefer API consumption or an original adapter. If source is incorporated, record exact provenance and retain the MIT notice.
-- Operational risk: Platform responses and public instances may fail or change. A successful empty response, a transport failure and stale cached data must remain distinguishable.
+- Contract reviewed at commit: `36c77e3bd891c11642d314cfb229bf31646704de`
+- Use: Outbound HTTP fallback Provider for Douyin, Weibo and Bilibili.
+- Local implementation: `backend/app/providers/hotspot/dailyhot.py`; original adapter code only.
+- Copied upstream code: None.
+- Freshness rule: `fromCache=true` is always `stale`; an explicit empty `data` array remains a real empty success, while a missing or malformed `data` field is a failed response.
+- Operational finding on 2026-08-14: The documented public hostname did not resolve from this environment. An unmodified local upstream checkout started successfully but its three platform routes returned HTTP 502 while reaching their upstreams.
 
 ### OpenCLI
 
 - Project: https://github.com/jackwener/opencli
 - License: Apache License 2.0
-- Intended use: Isolated fallback Provider for platforms or views requiring a logged-in browser session.
+- Contract reviewed at commit: `a86d64705c526dc710f790e66cfcabf6ecf786b9`
+- Package verified: `@jackwener/opencli` 1.8.6, Apache-2.0, Node.js >=20.
+- Use: Process-isolated fallback Provider for Xiaohongshu's logged-in browser feed.
+- Local implementation: `backend/app/providers/hotspot/opencli.py`; original subprocess adapter only. Commands use an argument vector without a shell, kill the child on collector cancellation, and do not log cookies or browser data.
+- Copied upstream code: None.
 - Current workspace artifact: `bin/autocli.exe` existed before the HotPush baseline was imported and remains untracked in Phase 0. It reports `autocli 0.3.8` and is from the earlier `nashsu/AutoCLI` lineage rather than a current OpenCLI release.
 - Artifact provenance: The local executable is byte-identical to the executable inside the official `nashsu/AutoCLI` v0.3.8 `autocli-x86_64-pc-windows-msvc.zip` release. Local executable SHA-256: `F1BF52BD7AEA43FBC984F6CAEEDA3496B3CC2E518510E7F3F668BFE477F89758`. Release tag commit: `c0969e2c83b29a7528452b1ba555085deca8e00d`. Official archive SHA-256: `CD439179091B28A0C9E373D69E93D767E2DC1E0E61DFC6C0F45607C588E7C1D1`.
 - Distribution status: Not approved for repository or release packaging. Phase 2 must decide whether to replace it with a supported OpenCLI release and must add the applicable Apache-2.0 LICENSE/NOTICE materials before distribution.
+- Phase 2 distribution decision: Neither the legacy executable nor OpenCLI is committed or packaged. Production installation remains an external runtime responsibility; distributing it later requires Apache-2.0 LICENSE/NOTICE review.
 - Integration rule: Run out of process behind the Provider contract. Do not expose browser cookies, tokens, profiles or personal data to application logs. Retain Apache-2.0 license and NOTICE obligations for any distributed binary or source modification; document modified files when applicable.
 - Operational risk: Browser login expiry, extension/daemon availability, platform anti-automation rules, account permissions and UI/API changes.
+- Operational finding on 2026-08-14: Current OpenCLI 1.8.6 was executable, but its Browser Bridge extension was not connected (exit code 69). The legacy local executable reported the equivalent bridge failure. Xiaohongshu therefore remained an explicit failed collection with zero live items.
 
 ## 3. Design-only references — source code prohibited
 
