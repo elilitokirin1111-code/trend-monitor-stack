@@ -15,12 +15,14 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app.config import settings
 from app.domain.hotspot import ReportType
 from app.models.schemas import HotItem, PushMessage
+from app.observability import registry, timed
 from app.services.ai_service import ai_service
 from app.services.config_service import config_service
 from app.services.database import db
 from app.services.hotspot_clustering import hotspot_clustering_service
 from app.services.hotspot_classification import hotspot_classification_service
 from app.services.hotspot_collection import hotspot_collection_service
+from app.services.hotspot_monitoring import hotspot_monitoring_service
 from app.services.hotspot_normalization import hotspot_normalization_service
 from app.services.hotspot_reports import hotspot_report_service
 from app.services.hotspot_trends import hotspot_trend_service
@@ -57,6 +59,7 @@ class SchedulerService:
         self._last_classification_result = None
         self._last_daily_report_result = None
         self._last_weekly_report_result = None
+        self._last_alert_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
@@ -91,6 +94,7 @@ class SchedulerService:
                 "last_classification_result": self._last_classification_result,
                 "last_daily_report_result": self._last_daily_report_result,
                 "last_weekly_report_result": self._last_weekly_report_result,
+                "last_alert_result": self._last_alert_result,
             },
         }
 
@@ -555,7 +559,13 @@ class SchedulerService:
         self._last_trend_result = None
         self._last_classification_result = None
         try:
-            outcomes = await hotspot_collection_service.collect_all()
+            with timed("hotspot_collection_seconds"):
+                outcomes = await hotspot_collection_service.collect_all()
+            for outcome in outcomes:
+                registry.inc(
+                    "hotspot_collection_total",
+                    {"platform": outcome.platform.value, "state": outcome.state},
+                )
             self._last_hotspot_result = [
                 {
                     "platform": outcome.platform.value,
@@ -566,9 +576,10 @@ class SchedulerService:
                 }
                 for outcome in outcomes
             ]
-            normalization_outcomes = (
-                await hotspot_normalization_service.process_pending()
-            )
+            with timed("hotspot_normalization_seconds"):
+                normalization_outcomes = (
+                    await hotspot_normalization_service.process_pending()
+                )
             self._last_normalization_result = [
                 {
                     "snapshot_id": outcome.snapshot_id,
@@ -581,7 +592,8 @@ class SchedulerService:
                 }
                 for outcome in normalization_outcomes
             ]
-            clustering_outcome = await hotspot_clustering_service.process_current()
+            with timed("hotspot_clustering_seconds"):
+                clustering_outcome = await hotspot_clustering_service.process_current()
             self._last_clustering_result = {
                 "state": clustering_outcome.state,
                 "clustering_run_id": clustering_outcome.clustering_run_id,
@@ -596,7 +608,8 @@ class SchedulerService:
                 "semantic_call_count": clustering_outcome.semantic_call_count,
                 "error": clustering_outcome.error,
             }
-            trend_outcome = await hotspot_trend_service.process_current()
+            with timed("hotspot_trend_seconds"):
+                trend_outcome = await hotspot_trend_service.process_current()
             self._last_trend_result = {
                 "state": trend_outcome.state,
                 "trend_run_id": trend_outcome.trend_run_id,
@@ -608,7 +621,10 @@ class SchedulerService:
                 },
                 "error": trend_outcome.error,
             }
-            classification_outcome = await hotspot_classification_service.process_current()
+            with timed("hotspot_classification_seconds"):
+                classification_outcome = await hotspot_classification_service.process_current()
+            if classification_outcome.state == "failed":
+                registry.inc("hotspot_classification_failed_total")
             self._last_classification_result = {
                 "state": classification_outcome.state,
                 "classification_run_id": classification_outcome.classification_run_id,
@@ -618,6 +634,13 @@ class SchedulerService:
                 "failed_count": classification_outcome.failed_count,
                 "skipped_count": classification_outcome.skipped_count,
                 "error": classification_outcome.error,
+            }
+            alert_outcome = await hotspot_monitoring_service.check_alerts()
+            self._last_alert_result = {
+                "state": alert_outcome.state,
+                "changed": alert_outcome.changed,
+                "alert_count": len(alert_outcome.alerts),
+                "error": alert_outcome.error,
             }
             return outcomes
         except Exception as e:

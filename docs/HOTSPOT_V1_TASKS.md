@@ -23,7 +23,7 @@
 | 8 | 热点 Dashboard | 已完成 | API、组件、构建、端到端测试 |
 | 9 | 日报/周报系统 | 已完成 | 窗口、模板、幂等、快照测试 |
 | 10 | 飞书报告推送 | 已完成 | 签名、分片、重试、幂等测试 |
-| 11 | 运行稳定性和监控 | 未开始 | 故障注入、告警、恢复、负载测试 |
+| 11 | 运行稳定性和监控 | 已完成 | 故障注入、告警、恢复、负载测试 |
 
 ## Phase 0：项目审计与架构整理
 
@@ -557,9 +557,41 @@ Phase 11 完成运行稳定性与监控：结构化日志/指标/trace（correla
 
 ## Phase 11：运行稳定性和监控
 
-- [ ] 建立结构化日志、指标、trace/correlation ID。
-- [ ] 监控 Provider 成功率、延迟、空榜、stale 年龄和 fallback 比率。
-- [ ] 监控队列积压、聚类耗时、AI 失败、报告和投递状态。
-- [ ] 实现健康检查、就绪检查和告警规则。
-- [ ] 执行故障注入、恢复、迁移回滚、备份恢复和负载测试。
-- [ ] 完成运行手册、最终任务文档更新和独立 commit。
+- [x] 建立结构化日志、指标、trace/correlation ID。
+- [x] 监控 Provider 成功率、延迟、空榜、stale 年龄和 fallback 比率。
+- [x] 监控队列积压、聚类耗时、AI 失败、报告和投递状态。
+- [x] 实现健康检查、就绪检查和告警规则。
+- [x] 执行故障注入、恢复、迁移回滚、备份恢复和负载测试。
+- [x] 完成运行手册、最终任务文档更新和独立 commit。
+
+### 完成项
+
+- 结构化日志：`logger.py` 支持 JSON 行输出（`HOTSPOT_STRUCTURED_LOGS=1`）与 `CorrelationFilter`；新增 `CorrelationMiddleware`（`X-Correlation-ID` 透传/生成，响应回写），日志行携带 correlation ID 前缀。
+- 运行时指标：`app/observability/metrics.py` 进程内注册表（计数器/仪表/延迟摘要），Prometheus 文本渲染，`GET /api/v1/hotspots/monitoring/metrics` 公开抓取；采集/标准化/聚类/趋势/分类阶段用 `timed` 打点。
+- DB 聚合监控：`PipelineMonitor` 从 append-only 表聚合 Provider 成功率、平均延迟、空榜数、fallback 尝试与比率、平台失败数、最新 stale 年龄（分钟）、标准化积压快照数、最近聚类/趋势/分类/报告运行状态、失败投递总数。
+- 告警规则：`AlertEvaluator` 支持 stale 平台（超阈值 3 倍升 critical）、Provider 成功率（样本 ≥3）、失败运行数、积压快照数、失败投递（critical）五类规则；配置键 `hotspot_alerts_enabled` 等；指纹去重（`hotspot_alert_last_fingerprint`），变化时经可选 `hotspot_alert_webhook` 推送；调度器每次采集后自动评估并暴露 `last_alert_result`。
+- 健康/就绪：`/health`（liveness）保留，新增 `/health/ready`（数据库连通性）与 `/api/v1/hotspots/monitoring/health`（V1 管线视图）。
+- 监控 API：`GET /monitoring/summary`、`GET /monitoring/alerts`（登录）；metrics 端点公开且仅含运行时指标。
+- 故障注入与恢复测试：Provider 全失败→Dashboard 如实标记 failed/stale 且不伪造实时；下一窗口 fresh 采集恢复；SQLite 文件级备份/恢复后数据与迁移完整；迁移漂移（篡改已应用迁移）触发 `MigrationDriftError`；全新库完整重建全部 7 个迁移并幂等。
+- 负载测试：批量写入 1000 raw items 后 overview/events 查询在 5 秒门禁内且结果如实（未聚类不编造事件）；10 个批量 run 保持 append-only。
+- 运行手册：`docs/RUNBOOK.md`（架构、启动配置、任务清单、监控端点与告警规则、故障排查、备份恢复、回滚、质量门禁、上线前复核清单）。
+
+### 遗留问题
+
+- 生产告警通道目前仅飞书 webhook；多通道（Telegram/邮件）与 Prometheus 抓取接入（如 Grafana 面板）未部署验证。
+- 负载测试为 SQLite 本地门禁（<5s）；MySQL 生产规模压测需在部署环境执行。
+- 结构化日志的 JSON 模式需在真实采集场景下校验字段兼容性。
+
+### 测试证据
+
+- `pytest tests/hotspot/test_metrics.py tests/hotspot/test_monitor.py tests/hotspot/test_alerts.py tests/hotspot/test_monitoring_api.py tests/hotspot/test_fault_recovery.py tests/hotspot/test_load_scale.py`：27 passed（指标渲染、聚合正确性、五类告警规则、API 契约/鉴权、故障注入/恢复/备份/漂移/重建、负载门禁）。
+- 后端全量回归：`pytest -q`：292 passed。
+- 前端构建与测试：`npm test` 3 passed、`npm run build` 成功（Phase 8 后未再改动前端）。
+
+### 完成总览
+
+V1 全部 12 个 Phase（0–11）完成：审计→Collector→四平台接入→快照→标准化去重→聚类→趋势→AI 分类→Dashboard→日报/周报→飞书投递→监控运维，各阶段独立 commit、测试证据与任务文档齐备。V1 目标链路（Platform → ... → ReportEngine → Feishu → Monitoring）全部落地。
+
+### Commit
+
+本节随 `feat(phase-11): add observability, alerts and runbook` 独立提交。

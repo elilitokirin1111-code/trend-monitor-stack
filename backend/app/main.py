@@ -12,12 +12,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.middleware.auth import AuthMiddleware
+from app.middleware.correlation import CorrelationMiddleware
 from app.routers import (
     api,
     auth,
     config,
     history,
     hotspot_deliveries,
+    hotspot_monitoring,
     hotspot_reports,
     hotspots_v1,
     rules,
@@ -72,6 +74,9 @@ app.add_middleware(
 # 认证中间件
 app.add_middleware(AuthMiddleware)
 
+# Correlation/trace ID 中间件（最先执行，为所有请求提供 X-Correlation-ID）
+app.add_middleware(CorrelationMiddleware)
+
 # 注册路由
 app.include_router(api.router, prefix="/api", tags=["API"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
@@ -97,12 +102,33 @@ app.include_router(
     prefix="/api/v1/hotspots",
     tags=["Hotspot Deliveries V1"],
 )
+app.include_router(
+    hotspot_monitoring.router,
+    prefix="/api/v1/hotspots",
+    tags=["Hotspot Monitoring V1"],
+)
 
 
 @app.get("/health")
 async def health():
-    """健康检查"""
+    """Liveness 健康检查"""
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def readiness():
+    """就绪检查：数据库连接可用即就绪"""
+    from app.services.database import db as database
+
+    try:
+        with database.get_connection() as connection:
+            connection.execute("SELECT 1")
+        return {"status": "ready", "database": "ok"}
+    except Exception as exc:  # noqa: BLE001 - readiness must report, not raise
+        from app.utils.logger import logger
+
+        logger.error(f"就绪检查失败: {exc}")
+        return {"status": "not_ready", "database": "unavailable"}
 
 
 @app.get("/")

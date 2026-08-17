@@ -38,6 +38,7 @@ def _result(
     *,
     freshness: Freshness = Freshness.FRESH,
     status: CollectionStatus = CollectionStatus.SUCCESS,
+    at: datetime = AT,
 ) -> CollectorResult:
     item = ProviderHotItem(
         title="真实热点",
@@ -52,8 +53,8 @@ def _result(
         platform=Platform.WEIBO,
         status=ProviderStatus.SUCCESS,
         freshness=freshness,
-        fetched_at=AT,
-        observed_at=AT,
+        fetched_at=at,
+        observed_at=at,
         items=(item,),
         raw_payload=b'{"items":[{"title":"real"}]}',
         raw_content_type="application/json",
@@ -62,8 +63,8 @@ def _result(
     attempt = ProviderAttempt(
         provider_id="newsnow",
         attempt_number=1,
-        started_at=AT,
-        finished_at=AT + timedelta(seconds=1),
+        started_at=at,
+        finished_at=at + timedelta(seconds=1),
         result=provider_result,
     )
     raw_item = RawHotItem(
@@ -77,8 +78,8 @@ def _result(
         rank=item.rank,
         hot_score=item.hot_score,
         published_at=None,
-        observed_at=AT,
-        fetched_at=AT,
+        observed_at=at,
+        fetched_at=at,
         raw_data=item.raw_data,
         raw_payload_sha256=None,
     )
@@ -87,8 +88,8 @@ def _result(
         platform=Platform.WEIBO,
         status=status,
         freshness=freshness,
-        started_at=AT,
-        finished_at=AT + timedelta(seconds=2),
+        started_at=at,
+        finished_at=at + timedelta(seconds=2),
         items=(raw_item,),
         attempts=(attempt,),
         winning_provider_id="newsnow",
