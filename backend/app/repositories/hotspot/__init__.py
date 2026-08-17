@@ -3,6 +3,7 @@
 from .classifications import ClassificationRepository, ClassificationRepositoryInput
 from .clustering import ClusteringRepository
 from .dashboard import HotspotDashboardRepository
+from .deliveries import DeliveryRepository
 from .migrations import HotspotMigrationRunner, MigrationDriftError
 from .normalization import NormalizationRepository
 from .reports import ReportRepository
@@ -13,6 +14,7 @@ __all__ = [
     "ClassificationRepository",
     "ClassificationRepositoryInput",
     "ClusteringRepository",
+    "DeliveryRepository",
     "HotspotDashboardRepository",
     "HotspotMigrationRunner",
     "HotspotRepository",

@@ -17,6 +17,7 @@ from app.routers import (
     auth,
     config,
     history,
+    hotspot_deliveries,
     hotspot_reports,
     hotspots_v1,
     rules,
@@ -90,6 +91,11 @@ app.include_router(
     hotspot_reports.router,
     prefix="/api/v1/hotspots",
     tags=["Hotspot Reports V1"],
+)
+app.include_router(
+    hotspot_deliveries.router,
+    prefix="/api/v1/hotspots",
+    tags=["Hotspot Deliveries V1"],
 )
 
 

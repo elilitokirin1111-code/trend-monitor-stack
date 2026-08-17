@@ -22,6 +22,11 @@ from .clustering import (
     EventMember,
     SemanticStatus,
 )
+from .delivery import (
+    DeliveryErrorKind,
+    DeliveryRecord,
+    DeliveryStatus,
+)
 from .models import (
     CollectionStatus,
     CollectorResult,
@@ -91,6 +96,9 @@ __all__ = [
     "CollectorResult",
     "DedupGroup",
     "DedupMember",
+    "DeliveryErrorKind",
+    "DeliveryRecord",
+    "DeliveryStatus",
     "EventCluster",
     "EventMember",
     "Freshness",

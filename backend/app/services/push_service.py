@@ -3,10 +3,12 @@
 支持多渠道推送：Telegram、Discord、Email、Webhook、企业微信、飞书、钉钉
 支持从数据库读取配置，优先于环境变量配置
 """
+import time
 import httpx
 from typing import Optional, List, Dict, Any
 from abc import ABC, abstractmethod
 from app.config import settings
+from app.delivery.feishu import feishu_sign, mask_webhook_url
 from app.models.schemas import PushMessage, HotItem, PushChannel
 from app.utils.logger import logger
 
@@ -388,21 +390,42 @@ class FeishuPusher(BasePusher):
         content = self._build_content(message)
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(self.webhook_url, json={
-                    "msg_type": "post",
-                    "content": {
-                        "post": {
-                            "zh_cn": {
-                                "title": message.title,
-                                "content": content
-                            }
+            timeout = httpx.Timeout(15)
+            payload = {
+                "msg_type": "post",
+                "content": {
+                    "post": {
+                        "zh_cn": {
+                            "title": message.title,
+                            "content": content
                         }
                     }
-                })
-                response.raise_for_status()
-                logger.info("飞书推送成功")
-                return True
+                }
+            }
+            secret = settings.feishu_webhook_secret
+            if secret:
+                timestamp = int(time.time())
+                payload["timestamp"] = str(timestamp)
+                payload["sign"] = feishu_sign(timestamp, secret)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(self.webhook_url, json=payload)
+            if response.status_code < 200 or response.status_code >= 300:
+                logger.error(
+                    f"飞书推送失败: http {response.status_code} "
+                    f"(url={mask_webhook_url(self.webhook_url)})"
+                )
+                return False
+            body = response.json()
+            if isinstance(body, dict) and body.get("code") != 0:
+                logger.error(
+                    f"飞书推送失败: 业务码 {body.get('code')}: {body.get('msg')}"
+                )
+                return False
+            logger.info("飞书推送成功")
+            return True
+        except ValueError:
+            logger.error("飞书推送失败: 响应不是合法 JSON")
+            return False
         except Exception as e:
             logger.error(f"飞书推送失败: {e}")
             return False

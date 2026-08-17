@@ -22,7 +22,7 @@
 | 7 | AI 分类与酒旅相关性 | 已完成（生产模型评测待配置） | 204 tests + 严格 schema/证据/降级门禁 |
 | 8 | 热点 Dashboard | 已完成 | API、组件、构建、端到端测试 |
 | 9 | 日报/周报系统 | 已完成 | 窗口、模板、幂等、快照测试 |
-| 10 | 飞书报告推送 | 未开始 | 签名、分片、重试、幂等测试 |
+| 10 | 飞书报告推送 | 已完成 | 签名、分片、重试、幂等测试 |
 | 11 | 运行稳定性和监控 | 未开始 | 故障注入、告警、恢复、负载测试 |
 
 ## Phase 0：项目审计与架构整理
@@ -516,11 +516,44 @@ Phase 10 将 `FeishuPusher` 升级为报告投递适配器：webhook 签名/密�
 
 ## Phase 10：飞书报告推送
 
-- [ ] 将 `FeishuPusher` 升级为报告投递适配器。
-- [ ] 支持签名、凭据脱敏、超时、重试和指数退避。
-- [ ] 支持长度分片和飞书业务码校验。
-- [ ] 实现投递幂等、历史、重放和失败告警。
-- [ ] 完成签名/分片/重试/幂等测试、任务文档更新和独立 commit。
+- [x] 将 `FeishuPusher` 升级为报告投递适配器。
+- [x] 支持签名、凭据脱敏、超时、重试和指数退避。
+- [x] 支持长度分片和飞书业务码校验。
+- [x] 实现投递幂等、历史、重放和失败告警。
+- [x] 完成签名/分片/重试/幂等测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 新增 `app/delivery/` 投递模块：`FeishuDeliveryAdapter`（报告投递适配器）、`FeishuDeliveryRules`、签名/脱敏/分片工具。
+- 签名：按飞书官方算法 `HMAC-SHA256(timestamp + "\n" + secret)`，请求携带 `timestamp` 和 `sign`；凭据脱敏：webhook query 与 secret 永不进日志/配置哈希。
+- 超时（可配置）、有限重试（0–5）与指数退避（base 0.01–60s、max 30s）；错误分类：not_configured/timeout/network/http_error/business_error/invalid_response/unknown，仅可重试类触发重试。
+- 长度分片：报告正文按 `hotspot_delivery_max_chunk_chars`（默认 20000）切块，尽量在换行边界切割；每片独立投递并记录 `chunk_index/total_chunks`。
+- 飞书返回业务码校验：HTTP 2xx 且 `code == 0` 才视为成功，`code != 0` 记录业务码与 msg 为失败。
+- 幂等投递：`report_run_id + channel + content_version + chunk_index` 唯一键（`hotspot_report_deliveries` 表，迁移 007），重复投递跳过、`force` 覆盖重投。
+- 投递历史与重放：`GET /deliveries`、`GET /deliveries/{id}`、`POST /reports/{id}/deliver`、`POST /deliveries/{id}/replay`（后两者管理员）。
+- 失败告警：投递失败时通过可选 `hotspot_delivery_alert_webhook` 发送告警（best-effort 不重试），失败详情与告警状态均落库。
+- 旧 `FeishuPusher` 升级：复用签名、超时、业务码校验与脱敏日志，PushService 接口保持不变。
+- 新增 `feishu_webhook_secret` 应用配置项。
+
+### 遗留问题
+
+- 告警只支持飞书 webhook 单通道；多通道告警（Telegram/邮件）留待 Phase 11 监控接入。
+- 未做真实飞书端到端验证（需真实 webhook 与签名密钥）；签名算法按官方文档实现并有固定向量测试。
+- 报告投递未加入自动调度（报告生成后需手动或后续 Phase 11 定时触发投递）。
+
+### 测试证据
+
+- `pytest tests/hotspot/test_feishu_adapter.py tests/hotspot/test_delivery_repository.py tests/hotspot/test_delivery_service.py tests/hotspot/test_deliveries_api.py`：28 passed（签名向量、URL 脱敏、分片边界、业务码不重试、HTTP 错误重试+退避、瞬时网络故障恢复、超时分类、幂等键、force 覆盖、失败告警、重放恢复、API 鉴权/404/契约）。
+- 后端全量回归：`pytest -q`：265 passed。
+- 迁移幂等：`HotspotMigrationRunner.apply() == (1,2,3,4,5,6,7)`。
+
+### 下一 Phase 计划
+
+Phase 11 完成运行稳定性与监控：结构化日志/指标/trace（correlation ID）、Provider 成功率/延迟/空榜/stale 年龄/fallback 比率监控、队列积压/聚类耗时/AI 失败/报告与投递状态监控、健康/就绪检查与告警规则、故障注入/恢复/迁移回滚/备份恢复/负载测试、运行手册，最终任务文档更新与独立 commit。
+
+### Commit
+
+本节随 `feat(phase-10): add feishu report delivery with signing and idempotency` 独立提交。
 
 ## Phase 11：运行稳定性和监控
 

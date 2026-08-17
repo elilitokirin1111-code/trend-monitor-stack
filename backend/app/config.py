@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     
     # 飞书配置
     feishu_webhook_url: Optional[str] = None
+    feishu_webhook_secret: Optional[str] = None  # 飞书群机器人签名密钥（安全设置-签名校验）
     
     # 钉钉配置
     dingtalk_webhook_url: Optional[str] = None
