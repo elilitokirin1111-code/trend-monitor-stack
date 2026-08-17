@@ -6,12 +6,14 @@
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
+from app.domain.hotspot import ReportType
 from app.models.schemas import HotItem, PushMessage
 from app.services.ai_service import ai_service
 from app.services.config_service import config_service
@@ -20,6 +22,7 @@ from app.services.hotspot_clustering import hotspot_clustering_service
 from app.services.hotspot_classification import hotspot_classification_service
 from app.services.hotspot_collection import hotspot_collection_service
 from app.services.hotspot_normalization import hotspot_normalization_service
+from app.services.hotspot_reports import hotspot_report_service
 from app.services.hotspot_trends import hotspot_trend_service
 from app.services.push_service import push_service
 from app.services.rss_fetcher import rss_fetcher
@@ -52,6 +55,8 @@ class SchedulerService:
         self._last_clustering_result = None
         self._last_trend_result = None
         self._last_classification_result = None
+        self._last_daily_report_result = None
+        self._last_weekly_report_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
@@ -84,6 +89,8 @@ class SchedulerService:
                 "last_clustering_result": self._last_clustering_result,
                 "last_trend_result": self._last_trend_result,
                 "last_classification_result": self._last_classification_result,
+                "last_daily_report_result": self._last_daily_report_result,
+                "last_weekly_report_result": self._last_weekly_report_result,
             },
         }
 
@@ -618,6 +625,27 @@ class SchedulerService:
             logger.error(f"Collector V2 抓取失败: {e}")
             raise
 
+    async def _report_generation_job(self, report_type: ReportType):
+        """生成日报/周报；失败只记录，不影响采集链路。"""
+        outcome = await hotspot_report_service.generate(report_type)
+        result = {
+            "state": outcome.state,
+            "report_run_id": outcome.report_run_id,
+            "status": outcome.status,
+            "data_quality": outcome.data_quality,
+            "item_count": outcome.item_count,
+            "error": outcome.error,
+        }
+        if report_type is ReportType.DAILY:
+            self._last_daily_report_result = result
+        else:
+            self._last_weekly_report_result = result
+        if outcome.state == "failed":
+            logger.error(
+                f"{report_type.value} 报告生成失败: {outcome.error}"
+            )
+        return outcome
+
     def start(self):
         """启动定时任务"""
         interval = self._get_interval()
@@ -656,6 +684,37 @@ class SchedulerService:
             id="cleanup_snapshots",
             name="清理旧快照数据",
             replace_existing=True
+        )
+
+        # V1 报告生成：日报每天 01:00、周报每周一 01:00（Asia/Shanghai）
+        self.scheduler.add_job(
+            self._report_generation_job,
+            args=(ReportType.DAILY,),
+            trigger=CronTrigger(
+                hour=1, minute=0, timezone=ZoneInfo("Asia/Shanghai")
+            ),
+            id="hotspot_report_daily",
+            name="V1 热点日报",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
+        self.scheduler.add_job(
+            self._report_generation_job,
+            args=(ReportType.WEEKLY,),
+            trigger=CronTrigger(
+                day_of_week="mon",
+                hour=1,
+                minute=0,
+                timezone=ZoneInfo("Asia/Shanghai"),
+            ),
+            id="hotspot_report_weekly",
+            name="V1 热点周报",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=7200,
         )
 
         # 启动调度器

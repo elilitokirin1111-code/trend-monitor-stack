@@ -48,6 +48,15 @@ from .normalization import (
     PublishedAtPrecision,
     SnapshotRawItem,
 )
+from .reports import (
+    ReportBatch,
+    ReportDataQuality,
+    ReportEventItem,
+    ReportInput,
+    ReportPlatformSignal,
+    ReportStatus,
+    ReportType,
+)
 from .trends import (
     PlatformSignal,
     PreviousTrendState,
@@ -102,6 +111,13 @@ __all__ = [
     "ProviderStatus",
     "PublishedAtPrecision",
     "RawHotItem",
+    "ReportBatch",
+    "ReportDataQuality",
+    "ReportEventItem",
+    "ReportInput",
+    "ReportPlatformSignal",
+    "ReportStatus",
+    "ReportType",
     "SemanticStatus",
     "SnapshotRawItem",
     "SnapshotWindow",

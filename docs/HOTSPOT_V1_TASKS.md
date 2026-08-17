@@ -21,7 +21,7 @@
 | 6 | 趋势生命周期引擎 | 已完成 | 179 tests + freshness/失败水位保护 |
 | 7 | AI 分类与酒旅相关性 | 已完成（生产模型评测待配置） | 204 tests + 严格 schema/证据/降级门禁 |
 | 8 | 热点 Dashboard | 已完成 | API、组件、构建、端到端测试 |
-| 9 | 日报/周报系统 | 未开始 | 窗口、模板、幂等、快照测试 |
+| 9 | 日报/周报系统 | 已完成 | 窗口、模板、幂等、快照测试 |
 | 10 | 飞书报告推送 | 未开始 | 签名、分片、重试、幂等测试 |
 | 11 | 运行稳定性和监控 | 未开始 | 故障注入、告警、恢复、负载测试 |
 
@@ -478,11 +478,41 @@ Phase 9 实现日报/周报系统：新增 `reports` 迁移；`ReportEngine` 只
 
 ## Phase 9：日报/周报系统
 
-- [ ] 定义日报/周报时间窗和版本。
-- [ ] 基于事件与趋势生成报告，不直接读取 Provider 响应。
-- [ ] 实现幂等生成、重跑和审计来源。
-- [ ] 明确标记 stale、缺失平台和数据不完整。
-- [ ] 完成窗口/模板/快照测试、任务文档更新和独立 commit。
+- [x] 定义日报/周报时间窗和版本。
+- [x] 基于事件与趋势生成报告，不直接读取 Provider 响应。
+- [x] 实现幂等生成、重跑和审计来源。
+- [x] 明确标记 stale、缺失平台和数据不完整。
+- [x] 完成窗口/模板/快照测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 新增 `ReportType`（daily/weekly）、`ReportStatus`、`ReportDataQuality` 领域合同和 `ReportRules` 配置（`hotspot_report_version`、`hotspot_report_template`、`hotspot_report_max_items`、`hotspot_report_include_irrelevant`、`hotspot_report_timezone`），配置进入稳定 `config_hash`。
+- 时间窗按 `Asia/Shanghai` 自然日：日报为最近 1 个自然日、周报为最近 7 个自然日；支持显式 `period_start` 和 31 天上限校验。
+- `ReportEngine` 只消费版本化趋势状态、事件成员和 AI 分类（含已有摘要），确定性渲染 Markdown 报告，不读取 Provider 响应；事件按趋势分排序、可过滤不相关事件、`max_items` 截断。
+- `ReportRepository` 按 `report_type + period_start + report_version + config_hash + input_hash + attempt` 幂等落库；`report_run_id_base` 确定性生成，`force` 重跑追加 `attempt` 新记录，旧记录保留可审计。
+- 报告明确标记 `stale_platforms`、`missing_platforms` 和数据质量（complete/partial/stale_only/no_fresh_data），正文包含审计来源（源趋势运行、源分类运行、输入/配置哈希）。
+- 新增 `hotspot_report_runs` 迁移（sqlite/mysql 双份）；调度器注册 `hotspot_report_daily`（每天 01:00）和 `hotspot_report_weekly`（每周一 01:00）独立任务并记录最近结果；`POST /api/v1/hotspots/reports/{daily|weekly}/regenerate` 提供管理员手动重跑入口。
+- 新增 V1 报告 API：`GET /reports`（类型/分页筛选）、`GET /reports/{report_run_id}`（详情含正文）、`POST /reports/{report_type}/regenerate`（管理员）。
+
+### 遗留问题
+
+- 报告正文为确定性 Markdown 模板；AI 生成摘要未启用（仅复用 Phase 7 分类摘要）。后续可接入报告级 AI 摘要端口（架构文档 §9 允许），默认关闭不产生费用。
+- 周报时间窗固定为最近 7 个自然日，暂不支持自定义结束日。
+- 前端暂无报告浏览页，可通过 API/Swagger 查看。
+
+### 测试证据
+
+- `pytest tests/hotspot/test_report_rules.py tests/hotspot/test_report_engine.py tests/hotspot/test_report_repository.py tests/hotspot/test_reports_api.py`：23 passed（窗口/版本/配置哈希、模板渲染与排序、stale/缺失标记、数据质量判定、幂等生成、force 重跑 attempt 追加、列表分页、API 鉴权与管理员门禁、404）。
+- 后端全量回归：`pytest -q`：237 passed。
+- 迁移幂等：`HotspotMigrationRunner.apply() == (1,2,3,4,5,6)`，重复 apply 返回空。
+
+### 下一 Phase 计划
+
+Phase 10 将 `FeishuPusher` 升级为报告投递适配器：webhook 签名/密钥与凭据脱敏、超时/有限重试/指数退避、长度分片与飞书业务码校验、`report_run_id + channel + content_version` 幂等投递、`report_deliveries` 表与重放/失败告警，完成签名/分片/重试/幂等测试后独立 commit。
+
+### Commit
+
+本节随 `feat(phase-9): add versioned daily and weekly hotspot reports` 独立提交。
 
 ## Phase 10：飞书报告推送
 
