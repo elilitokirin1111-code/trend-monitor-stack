@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-const API_BASE = '/api'
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 export const useAuthStore = defineStore('auth', () => {
     // State

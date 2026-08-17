@@ -43,6 +43,20 @@ class TestPublicPaths:
 
 class TestAuthEndpoints:
     @pytest.mark.asyncio
+    async def test_cors_preflight_is_not_blocked_by_auth(self, client):
+        response = await client.options(
+            "/api/v1/hotspots/overview",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+    @pytest.mark.asyncio
     async def test_protected_endpoint_without_token(self, client):
         response = await client.get("/api/sources")
         assert response.status_code == 401

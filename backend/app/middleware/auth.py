@@ -88,6 +88,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """认证中间件"""
 
     async def dispatch(self, request: Request, call_next):
+        # CORS middleware must receive browser preflight requests before auth.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # 如果未启用认证，则不需要验证
         if not is_auth_enabled():
             return await call_next(request)

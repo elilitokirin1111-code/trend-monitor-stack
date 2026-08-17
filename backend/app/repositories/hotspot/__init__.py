@@ -2,6 +2,7 @@
 
 from .classifications import ClassificationRepository, ClassificationRepositoryInput
 from .clustering import ClusteringRepository
+from .dashboard import HotspotDashboardRepository
 from .migrations import HotspotMigrationRunner, MigrationDriftError
 from .normalization import NormalizationRepository
 from .repository import HotspotRepository, WindowedCollectionWriter
@@ -11,6 +12,7 @@ __all__ = [
     "ClassificationRepository",
     "ClassificationRepositoryInput",
     "ClusteringRepository",
+    "HotspotDashboardRepository",
     "HotspotMigrationRunner",
     "HotspotRepository",
     "MigrationDriftError",

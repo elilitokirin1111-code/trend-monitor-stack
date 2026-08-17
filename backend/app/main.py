@@ -2,26 +2,29 @@
 HotPush - 热点聚合推送平台
 主入口文件
 """
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.routers import api
-from app.routers import auth
-from app.routers import config
-from app.routers import sources
-from app.routers import rules
-from app.routers import history
-from app.routers import scheduler
-from app.routers import users
-from app.routers import trends
-from app.services.scheduler import start_scheduler, stop_scheduler
-from app.middleware.auth import AuthMiddleware
 from app.config import settings
+from app.middleware.auth import AuthMiddleware
+from app.routers import (
+    api,
+    auth,
+    config,
+    history,
+    hotspots_v1,
+    rules,
+    scheduler,
+    sources,
+    trends,
+    users,
+)
+from app.services.scheduler import start_scheduler, stop_scheduler
 from app.utils.logger import logger
 
 # 前端静态文件目录
@@ -77,6 +80,11 @@ app.include_router(history.router, prefix="/api/history", tags=["History"])
 app.include_router(scheduler.router, prefix="/api/scheduler", tags=["Scheduler"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(trends.router, prefix="/api/trends", tags=["Trends"])
+app.include_router(
+    hotspots_v1.router,
+    prefix="/api/v1/hotspots",
+    tags=["Hotspot Dashboard V1"],
+)
 
 
 @app.get("/health")

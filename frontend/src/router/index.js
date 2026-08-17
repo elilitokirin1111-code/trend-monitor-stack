@@ -10,6 +10,7 @@ const PushRulesView = () => import('../views/PushRulesView.vue')
 const PushHistoryView = () => import('../views/PushHistoryView.vue')
 const SchedulerView = () => import('../views/SchedulerView.vue')
 const UserManagementView = () => import('../views/UserManagementView.vue')
+const HotspotDashboardView = () => import('../views/HotspotDashboardView.vue')
 
 // 登录页由 App.vue 独立渲染，这里只用于承载 /login 路由状态
 const LoginRoutePlaceholder = { render: () => null }
@@ -36,6 +37,12 @@ const routes = [
         name: 'sources',
         component: DataSourcesView,
         meta: { title: '数据源', subtitle: '查看数据源', icon: 'fas fa-rss' }
+    },
+    {
+        path: '/intelligence',
+        name: 'intelligence',
+        component: HotspotDashboardView,
+        meta: { title: '热点情报', subtitle: '跨平台事件、趋势生命周期与证据链', icon: 'fas fa-radar' }
     },
     {
         path: '/trends',

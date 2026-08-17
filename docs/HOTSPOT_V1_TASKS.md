@@ -20,7 +20,7 @@
 | 5 | 跨平台事件聚类 | 已完成 | 158 tests + 有界候选规模保护 |
 | 6 | 趋势生命周期引擎 | 已完成 | 179 tests + freshness/失败水位保护 |
 | 7 | AI 分类与酒旅相关性 | 已完成（生产模型评测待配置） | 204 tests + 严格 schema/证据/降级门禁 |
-| 8 | 热点 Dashboard | 未开始 | API、组件、构建、端到端测试 |
+| 8 | 热点 Dashboard | 已完成 | API、组件、构建、端到端测试 |
 | 9 | 日报/周报系统 | 未开始 | 窗口、模板、幂等、快照测试 |
 | 10 | 飞书报告推送 | 未开始 | 签名、分片、重试、幂等测试 |
 | 11 | 运行稳定性和监控 | 未开始 | 故障注入、告警、恢复、负载测试 |
@@ -441,12 +441,40 @@ Phase 8 只实现热点 Dashboard 与 V1 读取 API：
 
 ## Phase 8：热点 Dashboard
 
-- [ ] 新增 V1 事件、趋势、平台、freshness API。
-- [ ] 展示实时/陈旧/失败状态和数据年龄。
-- [ ] 展示事件成员与原始证据链接。
-- [ ] 展示趋势生命周期、酒旅相关性和筛选。
-- [ ] 增加采集健康和 Provider fallback 可见性。
-- [ ] 完成 API/组件/构建/E2E 测试、任务文档更新和独立 commit。
+- [x] 新增 V1 事件、趋势、平台、freshness API。
+- [x] 展示实时/陈旧/失败状态和数据年龄。
+- [x] 展示事件成员与原始证据链接。
+- [x] 展示趋势生命周期、酒旅相关性和筛选。
+- [x] 增加采集健康和 Provider fallback 可见性。
+- [x] 完成 API/组件/构建/E2E 测试、任务文档更新和独立 commit。
+
+### 完成项
+
+- 新增 `/api/v1/hotspots` 只读 API：`GET /overview`（平台健康卡片）、`GET /events`（关键词/平台/生命周期/酒旅相关性/数据质量筛选 + 分页）、`GET /events/{event_id}`（事件成员与原始证据）、`GET /raw-items/{raw_item_id}`（原始热点证据）。
+- 平台健康卡片展示 `fresh/stale/failed/unavailable` 状态、数据年龄（`formatAgeMinutes`）、胜出 Provider、fallback 是否触发、stale 原因和最近错误，且永不把 unavailable/失败数据描述为实时。
+- 事件列表展示趋势生命周期状态、酒旅相关性、数据质量和证据链；事件详情链接全部原始证据记录，未知证据返回 404。
+- 前端新增 `/intelligence` 热点情报页（`HotspotDashboardView.vue`）、Pinia store 与查询构建工具；侧边栏新增"热点情报"入口。
+- Dashboard 仓储坚持 freshness 硬边界：最新失败保留旧快照但标记 `failed` 且 `stale`，空数据库返回显式空状态，stale 阈值可运行时配置。
+
+### 遗留问题
+
+- 前端 E2E（Playwright 等）未引入；目前以 Node 内置 test runner 单元测试 + Vite 生产构建 + 后端 API 契约测试覆盖。
+- 生产部署仍缺真实四平台 live 数据（见 Phase 2 遗留），Dashboard 会如实显示采集失败/不可用状态。
+
+### 测试证据
+
+- `pytest tests/hotspot/test_dashboard_api.py tests/hotspot/test_dashboard_repository.py -v`：9 passed（鉴权保护、契约、404、overview 不隐藏 unavailable、stale 阈值配置、失败保留旧快照、事件筛选、证据链接、空库显式空状态）。
+- 后端全量回归：`pytest -q`：214 passed。
+- 前端：`npm test`：3 passed（查询构建省略空筛选、freshness 标签/色调、数据年龄格式化）。
+- 前端生产构建：`npm run build`：Vite 构建成功。
+
+### 下一 Phase 计划
+
+Phase 9 实现日报/周报系统：新增 `reports` 迁移；`ReportEngine` 只消费已版本化的事件与趋势状态（不直接读取 Provider 响应）；`ReportService` 按 `period + report_type + version + input_hash` 幂等生成、支持重跑与审计；明确标记 stale、缺失平台和数据不完整；补窗口/模板/快照测试并独立 commit。
+
+### Commit
+
+本节随 `feat(phase-8): add hotspot intelligence dashboard` 独立提交。
 
 ## Phase 9：日报/周报系统
 

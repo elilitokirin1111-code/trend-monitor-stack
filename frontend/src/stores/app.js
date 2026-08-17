@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-const API_BASE = '/api'
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 export const useAppStore = defineStore('app', () => {
     // State - 默认 13 个内置数据源
