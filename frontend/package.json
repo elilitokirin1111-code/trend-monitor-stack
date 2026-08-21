@@ -3,6 +3,9 @@
   "version": "0.5.0",
   "description": "HotPush - 热点聚合推送平台",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

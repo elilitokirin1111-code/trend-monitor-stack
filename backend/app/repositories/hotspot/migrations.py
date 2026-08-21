@@ -28,6 +28,13 @@ class MigrationDriftError(RuntimeError):
     """An applied migration was edited after deployment."""
 
 
+_MYSQL_CREATE_INDEX_PATTERN = re.compile(
+    r"^\s*CREATE\s+INDEX\s+`?(?P<index>[a-z0-9_]+)`?\s+"
+    r"ON\s+`?(?P<table>[a-z0-9_]+)`?\s*\((?P<columns>[^)]+)\)\s*;?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 class HotspotMigrationRunner:
     def __init__(
         self,
@@ -61,7 +68,7 @@ class HotspotMigrationRunner:
                         )
                     continue
                 for statement in migration.statements:
-                    cursor.execute(statement)
+                    self._execute_statement(cursor, statement)
                 cursor.execute(
                     self._sql(
                         "INSERT INTO hotspot_schema_migrations "
@@ -76,6 +83,41 @@ class HotspotMigrationRunner:
                 )
                 applied_now.append(migration.version)
         return tuple(applied_now)
+
+    def _execute_statement(self, cursor, statement: str) -> None:
+        """Execute DDL and safely resume a partially applied MySQL index step."""
+        index_match = _MYSQL_CREATE_INDEX_PATTERN.match(statement)
+        try:
+            cursor.execute(statement)
+        except Exception as exc:
+            error_code = exc.args[0] if exc.args else None
+            if (
+                self._database.db_type != "mysql"
+                or error_code != 1061
+                or index_match is None
+                or not self._mysql_index_matches(cursor, index_match)
+            ):
+                raise
+
+    @staticmethod
+    def _mysql_index_matches(cursor, match: re.Match[str]) -> bool:
+        expected_columns = tuple(
+            column.strip().strip("`").split()[0].lower()
+            for column in match.group("columns").split(",")
+        )
+        cursor.execute(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND INDEX_NAME = %s "
+            "ORDER BY SEQ_IN_INDEX",
+            (match.group("table"), match.group("index")),
+        )
+        actual_columns = tuple(
+            str(row["COLUMN_NAME"]).lower()
+            if isinstance(row, dict)
+            else str(row[0]).lower()
+            for row in cursor.fetchall()
+        )
+        return actual_columns == expected_columns
 
     def _load_migrations(self) -> tuple[Migration, ...]:
         directory = self._root / self._database.db_type

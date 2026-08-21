@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS hotspot_event_members (
         REFERENCES hotspot_dedup_groups(group_id),
     CONSTRAINT fk_hotspot_member_normalized FOREIGN KEY(normalized_item_id)
         REFERENCES hotspot_normalized_items(normalized_item_id),
-    CONSTRAINT fk_hotspot_member_snapshot FOREIGN KEY(snapshot_id)
+    CONSTRAINT fk_hotspot_event_member_snapshot FOREIGN KEY(snapshot_id)
         REFERENCES hotspot_snapshots(snapshot_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 -- statement-breakpoint

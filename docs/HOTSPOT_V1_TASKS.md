@@ -635,3 +635,30 @@ V1 全部 12 个 Phase（0–11）完成：审计→Collector→四平台接入�
 ### Commit
 
 本节随 `feat(frontend): introduce intelligence workspace UX` 独立提交。
+
+## 部署修补：Docker 首次启动兼容性
+
+- [x] 将前端生产构建镜像从 Node 18 升级到 Node 22，并声明 Vite 8 所需的运行时契约。
+- [x] 修复 MySQL 事件聚类迁移中的跨表外键名称冲突。
+- [x] 支持 MySQL DDL 中断后续跑定义一致的已创建索引；定义不一致时仍立即失败，禁止掩盖漂移。
+- [x] 补充 MySQL 外键名称唯一性和索引续跑测试。
+- [x] 收紧后端 Docker 构建上下文，排除测试虚拟环境和缓存目录。
+- [x] 完成真实 Docker Compose 首次启动、管理员登录和热点总览 API 验证。
+
+### 测试与运行证据
+
+- 后端定向回归：11 passed（MySQL 约束、部分迁移续跑、迁移/仓储幂等）。
+- 后端全量回归：`pytest -q`：295 passed。
+- 前端：`npm test`：7 passed；`npm run build`：Vite 生产构建成功。
+- Docker：MySQL/Redis/RSSHub healthy，Backend/Frontend 持续运行；7 个热点迁移版本全部登记。
+- 登录/API：默认管理员登录成功；`GET /api/v1/hotspots/overview` 返回 `generated_at/has_data/event_count/trend_run/platforms` 真实字段。
+- 后端 Docker 上下文由约 51 MB 降至约 189 KB。
+
+### 遗留问题
+
+- Docker Hub/CloudFront 在当前网络下偶发 TLS 握手超时；镜像已通过逐个重试拉取，不属于应用数据或代码故障。
+- 对外部署前必须替换 Compose 中的默认管理员密码、MySQL 密码和 JWT Secret。
+
+### Commit
+
+本节随 `fix(docker): repair first-run build and MySQL migrations` 独立提交。
