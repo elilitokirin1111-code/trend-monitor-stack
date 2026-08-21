@@ -2,6 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+    color-scheme: dark;
+    --app-bg: #08100f;
+    --surface-sidebar: #0b1513;
+    --surface-panel: #0e1917;
+    --surface-drawer: #0b1513;
+    --surface-soft: rgba(255, 255, 255, 0.028);
+    --surface-hover: rgba(255, 255, 255, 0.052);
+    --surface-hero: radial-gradient(circle at 82% 16%, rgba(210, 164, 77, 0.12), transparent 32%), linear-gradient(135deg, #111d1a 0%, #0c1715 100%);
+    --text-strong: #f3f4ef;
+    --text-default: #cbd2cc;
+    --text-muted: #829088;
+    --text-subtle: #56635d;
+    --line-subtle: rgba(221, 232, 224, 0.075);
+    --line-strong: rgba(221, 232, 224, 0.14);
+    --accent-primary: #d2a44d;
+    --accent-strong: #e3b85f;
+    --accent-soft: rgba(210, 164, 77, 0.11);
+    --accent-border: rgba(210, 164, 77, 0.3);
+    --accent-button-text: #17130a;
+    --shadow-panel: 0 12px 34px rgba(0, 0, 0, 0.12);
+}
+
+html.light-mode {
+    color-scheme: light;
+    --app-bg: #f1f3ef;
+    --surface-sidebar: #f7f8f5;
+    --surface-panel: #fbfcf9;
+    --surface-drawer: #f8faf6;
+    --surface-soft: rgba(24, 42, 34, 0.035);
+    --surface-hover: rgba(24, 42, 34, 0.06);
+    --surface-hero: radial-gradient(circle at 82% 16%, rgba(183, 132, 46, 0.12), transparent 34%), linear-gradient(135deg, #fff 0%, #f7f8f3 100%);
+    --text-strong: #17211c;
+    --text-default: #34423b;
+    --text-muted: #69756f;
+    --text-subtle: #98a19c;
+    --line-subtle: rgba(28, 48, 38, 0.085);
+    --line-strong: rgba(28, 48, 38, 0.16);
+    --accent-primary: #b7832e;
+    --accent-strong: #95681f;
+    --accent-soft: rgba(183, 131, 46, 0.1);
+    --accent-border: rgba(183, 131, 46, 0.3);
+    --accent-button-text: #fff;
+    --shadow-panel: 0 10px 30px rgba(34, 48, 40, 0.045);
+}
+
 /* ===== BASE ===== */
 html, body {
     margin: 0;
@@ -10,9 +56,41 @@ html, body {
     height: 100%;
 }
 
+body {
+    color: var(--text-default);
+    background: var(--app-bg);
+    font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    font-feature-settings: "tnum" 1, "cv02" 1;
+    -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+body.drawer-open {
+    overflow: hidden;
+}
+
+.app-main > * {
+    width: 100%;
+    max-width: 1600px;
+    margin-right: auto;
+    margin-left: auto;
+}
+
 /* ===== BACKGROUND ===== */
 .gradient-bg {
     position: relative;
+    background: var(--app-bg);
 }
 .gradient-bg::before {
     content: '';
@@ -21,7 +99,10 @@ html, body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: url('/bg.jpg') center center / cover no-repeat;
+    background:
+        radial-gradient(circle at 85% -10%, rgba(210, 164, 77, 0.065), transparent 28%),
+        radial-gradient(circle at 20% 110%, rgba(54, 110, 91, 0.08), transparent 32%),
+        var(--app-bg);
     z-index: -2;
 }
 .gradient-bg::after {
@@ -31,26 +112,28 @@ html, body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(20, 15, 10, 0.45) 0%, rgba(30, 20, 15, 0.35) 100%);
+    background-image: linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+    background-size: 32px 32px;
     z-index: -1;
     transition: all 0.5s ease;
 }
 .light-mode .gradient-bg::after {
-    background: linear-gradient(135deg, rgba(255, 250, 240, 0.3) 0%, rgba(255, 245, 230, 0.2) 100%);
+    background-image: linear-gradient(rgba(20,40,30,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(20,40,30,.018) 1px, transparent 1px);
+    background-size: 32px 32px;
 }
 
 /* ===== DARK MODE GLASS ===== */
 .glass {
-    background: rgba(20, 18, 15, 0.6);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(255, 200, 150, 0.1);
+    background: color-mix(in srgb, var(--surface-panel) 94%, transparent);
+    backdrop-filter: blur(18px) saturate(130%);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+    border: 1px solid var(--line-subtle);
     transition: all 0.4s ease;
 }
 .light-mode .glass {
-    background: rgba(255, 252, 248, 0.75);
-    border: 1px solid rgba(180, 140, 100, 0.15);
-    box-shadow: 0 8px 32px rgba(100, 70, 40, 0.08);
+    background: color-mix(in srgb, var(--surface-panel) 94%, transparent);
+    border: 1px solid var(--line-subtle);
+    box-shadow: var(--shadow-panel);
 }
 
 /* ===== LIGHT MODE TEXT ===== */

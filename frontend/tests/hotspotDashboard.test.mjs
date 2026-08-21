@@ -4,8 +4,14 @@ import assert from 'node:assert/strict'
 import {
   buildEventQuery,
   formatAgeMinutes,
+  formatTimestamp,
+  lifecycleLabel,
+  lifecycleTone,
+  platformName,
   platformStatusLabel,
   platformStatusTone,
+  relevanceLabel,
+  summarizePlatformHealth,
 } from '../src/utils/hotspotDashboard.js'
 
 
@@ -41,4 +47,34 @@ test('formatAgeMinutes makes data age explicit', () => {
   assert.equal(formatAgeMinutes(0), '刚刚')
   assert.equal(formatAgeMinutes(45), '45 分钟前')
   assert.equal(formatAgeMinutes(150), '2 小时 30 分钟前')
+})
+
+
+test('dashboard labels keep domain vocabulary consistent', () => {
+  assert.equal(platformName('xiaohongshu'), '小红书')
+  assert.equal(platformName('unknown'), 'unknown')
+  assert.equal(lifecycleLabel('rising'), '上升')
+  assert.equal(lifecycleTone('recurring'), 'violet')
+  assert.equal(relevanceLabel('relevant'), '高度相关')
+  assert.equal(relevanceLabel(null), '未分类')
+})
+
+
+test('platform health summary preserves stale and failed truthfully', () => {
+  assert.deepEqual(
+    summarizePlatformHealth([
+      { status: 'fresh' },
+      { status: 'stale' },
+      { status: 'failed' },
+      { status: 'unexpected' },
+    ]),
+    { fresh: 1, stale: 1, failed: 1, unavailable: 1, total: 4, attention: 2 },
+  )
+})
+
+
+test('formatTimestamp does not invent invalid timestamps', () => {
+  assert.equal(formatTimestamp(null), '时间未知')
+  assert.equal(formatTimestamp('not-a-date'), '时间未知')
+  assert.notEqual(formatTimestamp('2026-08-21T10:30:00+08:00'), '时间未知')
 })
