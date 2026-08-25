@@ -1,0 +1,14 @@
+[
+  {"case_id":"hotel-demand","title":"上海暑期酒店预订量明显增长","expected_category":"hotel_travel","expected_relevance":"high","label_basis":"标题直接描述酒店预订需求。"},
+  {"case_id":"homestay-policy","title":"多地发布民宿消防管理新规","expected_category":"hotel_travel","expected_relevance":"high","label_basis":"民宿经营规则直接影响住宿业。"},
+  {"case_id":"scenic-ticket","title":"热门景区暑期门票预约开启","expected_category":"hotel_travel","expected_relevance":"relevant","label_basis":"景区客流与目的地住宿需求相关。"},
+  {"case_id":"flight-delay","title":"雷雨天气导致多地航班延误","expected_category":"transport","expected_relevance":"adjacent","label_basis":"交通中断可能影响住客行程，但并非住宿事件。"},
+  {"case_id":"highway-free","title":"重大节假日高速公路免费通行","expected_category":"transport","expected_relevance":"adjacent","label_basis":"自驾出行环境与酒旅需求间接相关。"},
+  {"case_id":"restaurant-list","title":"城市必吃餐厅榜单发布","expected_category":"local_life","expected_relevance":"adjacent","label_basis":"本地餐饮消费可作为住客内容选题。"},
+  {"case_id":"concert-tour","title":"大型演唱会官宣全国巡演城市","expected_category":"culture_entertainment","expected_relevance":"relevant","label_basis":"跨城演出可能形成住宿需求。"},
+  {"case_id":"museum-exhibit","title":"国家博物馆推出年度主题展览","expected_category":"culture_entertainment","expected_relevance":"adjacent","label_basis":"文旅内容相关，但标题没有住宿需求证据。"},
+  {"case_id":"phone-launch","title":"新款智能手机正式发布","expected_category":"technology","expected_relevance":"irrelevant","label_basis":"消费电子发布与酒旅经营无直接关系。"},
+  {"case_id":"stock-index","title":"主要股指午后震荡上涨","expected_category":"finance_business","expected_relevance":"irrelevant","label_basis":"证券市场波动与门店经营没有可见证据关系。"},
+  {"case_id":"football-final","title":"联赛决赛进入加时赛","expected_category":"sports","expected_relevance":"irrelevant","label_basis":"单场赛事描述没有跨城客流证据。"},
+  {"case_id":"public-weather","title":"中央气象台发布高温橙色预警","expected_category":"social_public","expected_relevance":"adjacent","label_basis":"天气风险可能影响住客体验与门店运营。"}
+]

@@ -4,21 +4,32 @@
 支持定时摘要功能
 """
 import json
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
-from typing import List, Optional, Dict, Any
-from app.config import settings
-from app.services.rss_fetcher import rss_fetcher
-from app.services.push_service import push_service
-from app.services.database import db
-from app.models.schemas import PushMessage, HotItem
-from app.utils.sources import HOT_SOURCES
-from app.services.config_service import config_service
-from app.services.ai_service import ai_service
-from app.utils.logger import logger
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
+from app.config import settings
+from app.domain.hotspot import ReportType
+from app.models.schemas import HotItem, PushMessage
+from app.observability import registry, timed
+from app.services.ai_service import ai_service
+from app.services.config_service import config_service
+from app.services.database import db
+from app.services.hotspot_clustering import hotspot_clustering_service
+from app.services.hotspot_classification import hotspot_classification_service
+from app.services.hotspot_collection import hotspot_collection_service
+from app.services.hotspot_monitoring import hotspot_monitoring_service
+from app.services.hotspot_normalization import hotspot_normalization_service
+from app.services.hotspot_reports import hotspot_report_service
+from app.services.hotspot_trends import hotspot_trend_service
+from app.services.push_service import push_service
+from app.services.rss_fetcher import rss_fetcher
+from app.utils.logger import logger
+from app.utils.sources import HOT_SOURCES
 
 # 默认摘要配置
 DEFAULT_DIGEST_CONFIG = {
@@ -40,10 +51,20 @@ class SchedulerService:
         self._last_run_result = None
         self._last_digest_run = None
         self._last_digest_result = None
+        self._last_hotspot_run = None
+        self._last_hotspot_result = None
+        self._last_normalization_result = None
+        self._last_clustering_result = None
+        self._last_trend_result = None
+        self._last_classification_result = None
+        self._last_daily_report_result = None
+        self._last_weekly_report_result = None
+        self._last_alert_result = None
 
     def get_status(self) -> dict:
         """获取调度器状态"""
         job = self.scheduler.get_job("fetch_and_push")
+        hotspot_job = self.scheduler.get_job("hotspot_collect_v2")
 
         # 从数据库读取配置
         interval = self._get_interval()
@@ -57,7 +78,24 @@ class SchedulerService:
             "interval_minutes": interval,
             "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None,
             "last_run": self._last_run.isoformat() if self._last_run else None,
-            "last_run_result": self._last_run_result
+            "last_run_result": self._last_run_result,
+            "hotspot_v2": {
+                "interval_minutes": self._get_hotspot_interval(),
+                "next_run": hotspot_job.next_run_time.isoformat()
+                if hotspot_job and hotspot_job.next_run_time
+                else None,
+                "last_run": self._last_hotspot_run.isoformat()
+                if self._last_hotspot_run
+                else None,
+                "last_run_result": self._last_hotspot_result,
+                "last_normalization_result": self._last_normalization_result,
+                "last_clustering_result": self._last_clustering_result,
+                "last_trend_result": self._last_trend_result,
+                "last_classification_result": self._last_classification_result,
+                "last_daily_report_result": self._last_daily_report_result,
+                "last_weekly_report_result": self._last_weekly_report_result,
+                "last_alert_result": self._last_alert_result,
+            },
         }
 
     def _get_interval(self) -> int:
@@ -80,25 +118,45 @@ class SchedulerService:
             )
             logger.info(f"抓取间隔已更新为 {minutes} 分钟")
 
+    def _get_hotspot_interval(self) -> int:
+        """获取 Collector V2 历史快照间隔。"""
+        return hotspot_collection_service.get_interval_minutes()
+
+    def update_hotspot_interval(self, minutes: int):
+        """动态更新 Collector V2 任务间隔。"""
+        job = self.scheduler.get_job("hotspot_collect_v2")
+        if job:
+            self.scheduler.reschedule_job(
+                "hotspot_collect_v2",
+                trigger=IntervalTrigger(minutes=minutes),
+            )
+            logger.info(f"Collector V2 抓取间隔已更新为 {minutes} 分钟")
+
     def pause(self):
         """暂停调度器"""
-        job = self.scheduler.get_job("fetch_and_push")
-        if job:
-            job.pause()
-            self._is_paused = True
-            logger.info("调度器已暂停")
+        for job_id in ("fetch_and_push", "hotspot_collect_v2"):
+            job = self.scheduler.get_job(job_id)
+            if job:
+                job.pause()
+        self._is_paused = True
+        logger.info("调度器已暂停")
 
     def resume(self):
         """恢复调度器"""
-        job = self.scheduler.get_job("fetch_and_push")
-        if job:
-            job.resume()
-            self._is_paused = False
-            logger.info("调度器已恢复")
+        for job_id in ("fetch_and_push", "hotspot_collect_v2"):
+            job = self.scheduler.get_job(job_id)
+            if job:
+                job.resume()
+        self._is_paused = False
+        logger.info("调度器已恢复")
 
     async def trigger_fetch(self):
         """手动触发一次抓取"""
         await self._fetch_and_push_job()
+
+    async def trigger_hotspot_collection(self):
+        """手动触发与定时任务完全相同的 Collector V2 入口。"""
+        return await self._hotspot_collection_job()
 
     # ===== 定时摘要相关方法 =====
 
@@ -311,7 +369,6 @@ class SchedulerService:
 
             # 获取自定义数据源
             custom_sources = db.get_all_custom_sources()
-            custom_source_ids = [s["id"] for s in custom_sources if s["enabled"]]
 
             # 确定要抓取的内置数据源
             builtin_source_ids = list(HOT_SOURCES.keys())
@@ -319,9 +376,6 @@ class SchedulerService:
                 # 用户已配置数据源过滤，只抓取选中的内置源
                 builtin_source_ids = [s for s in builtin_source_ids if s in push_source_filter]
                 logger.info(f"推送数据源过滤：已选中 {len(builtin_source_ids)} 个内置源")
-
-            # 合并内置和自定义数据源
-            all_source_ids = builtin_source_ids + custom_source_ids
 
             # 抓取选中的热榜
             hot_lists = await rss_fetcher.fetch_all_hot_lists(source_ids=builtin_source_ids)
@@ -497,9 +551,129 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"快照清理失败: {e}")
 
+    async def _hotspot_collection_job(self):
+        """采集四平台窗口数据；失败只记录，不生成伪造快照。"""
+        self._last_hotspot_run = datetime.now(timezone.utc)
+        self._last_normalization_result = None
+        self._last_clustering_result = None
+        self._last_trend_result = None
+        self._last_classification_result = None
+        try:
+            with timed("hotspot_collection_seconds"):
+                outcomes = await hotspot_collection_service.collect_all()
+            for outcome in outcomes:
+                registry.inc(
+                    "hotspot_collection_total",
+                    {"platform": outcome.platform.value, "state": outcome.state},
+                )
+            self._last_hotspot_result = [
+                {
+                    "platform": outcome.platform.value,
+                    "window_start": outcome.window.start.isoformat(),
+                    "state": outcome.state,
+                    "run_id": outcome.run_id,
+                    "error_code": outcome.error_code,
+                }
+                for outcome in outcomes
+            ]
+            with timed("hotspot_normalization_seconds"):
+                normalization_outcomes = (
+                    await hotspot_normalization_service.process_pending()
+                )
+            self._last_normalization_result = [
+                {
+                    "snapshot_id": outcome.snapshot_id,
+                    "state": outcome.state,
+                    "normalization_run_id": outcome.normalization_run_id,
+                    "status": outcome.status.value if outcome.status else None,
+                    "total_count": outcome.total_count,
+                    "group_count": outcome.group_count,
+                    "error": outcome.error,
+                }
+                for outcome in normalization_outcomes
+            ]
+            with timed("hotspot_clustering_seconds"):
+                clustering_outcome = await hotspot_clustering_service.process_current()
+            self._last_clustering_result = {
+                "state": clustering_outcome.state,
+                "clustering_run_id": clustering_outcome.clustering_run_id,
+                "status": (
+                    clustering_outcome.status.value
+                    if clustering_outcome.status
+                    else None
+                ),
+                "input_group_count": clustering_outcome.input_group_count,
+                "candidate_pair_count": clustering_outcome.candidate_pair_count,
+                "event_count": clustering_outcome.event_count,
+                "semantic_call_count": clustering_outcome.semantic_call_count,
+                "error": clustering_outcome.error,
+            }
+            with timed("hotspot_trend_seconds"):
+                trend_outcome = await hotspot_trend_service.process_current()
+            self._last_trend_result = {
+                "state": trend_outcome.state,
+                "trend_run_id": trend_outcome.trend_run_id,
+                "status": trend_outcome.status.value if trend_outcome.status else None,
+                "event_count": trend_outcome.event_count,
+                "lifecycle_counts": {
+                    state.value: count
+                    for state, count in trend_outcome.lifecycle_counts.items()
+                },
+                "error": trend_outcome.error,
+            }
+            with timed("hotspot_classification_seconds"):
+                classification_outcome = await hotspot_classification_service.process_current()
+            if classification_outcome.state == "failed":
+                registry.inc("hotspot_classification_failed_total")
+            self._last_classification_result = {
+                "state": classification_outcome.state,
+                "classification_run_id": classification_outcome.classification_run_id,
+                "status": classification_outcome.status.value if classification_outcome.status else None,
+                "event_count": classification_outcome.event_count,
+                "success_count": classification_outcome.success_count,
+                "failed_count": classification_outcome.failed_count,
+                "skipped_count": classification_outcome.skipped_count,
+                "error": classification_outcome.error,
+            }
+            alert_outcome = await hotspot_monitoring_service.check_alerts()
+            self._last_alert_result = {
+                "state": alert_outcome.state,
+                "changed": alert_outcome.changed,
+                "alert_count": len(alert_outcome.alerts),
+                "error": alert_outcome.error,
+            }
+            return outcomes
+        except Exception as e:
+            self._last_hotspot_result = {"error": str(e)}
+            logger.error(f"Collector V2 抓取失败: {e}")
+            raise
+
+    async def _report_generation_job(self, report_type: ReportType):
+        """生成日报/周报；失败只记录，不影响采集链路。"""
+        outcome = await hotspot_report_service.generate(report_type)
+        result = {
+            "state": outcome.state,
+            "report_run_id": outcome.report_run_id,
+            "status": outcome.status,
+            "data_quality": outcome.data_quality,
+            "item_count": outcome.item_count,
+            "error": outcome.error,
+        }
+        if report_type is ReportType.DAILY:
+            self._last_daily_report_result = result
+        else:
+            self._last_weekly_report_result = result
+        if outcome.state == "failed":
+            logger.error(
+                f"{report_type.value} 报告生成失败: {outcome.error}"
+            )
+        return outcome
+
     def start(self):
         """启动定时任务"""
         interval = self._get_interval()
+        hotspot_interval = self._get_hotspot_interval()
+        hotspot_collection_service.initialize_storage()
 
         # 检查是否应该启用
         enabled_setting = db.get_setting("scheduler_enabled")
@@ -515,6 +689,17 @@ class SchedulerService:
             replace_existing=True
         )
 
+        self.scheduler.add_job(
+            self._hotspot_collection_job,
+            trigger=IntervalTrigger(minutes=hotspot_interval),
+            id="hotspot_collect_v2",
+            name="Collector V2 四平台历史快照",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=max(60, min(hotspot_interval * 60, 3600)),
+        )
+
         # 每日清理旧快照数据
         self.scheduler.add_job(
             self._cleanup_snapshots_job,
@@ -522,6 +707,37 @@ class SchedulerService:
             id="cleanup_snapshots",
             name="清理旧快照数据",
             replace_existing=True
+        )
+
+        # V1 报告生成：日报每天 01:00、周报每周一 01:00（Asia/Shanghai）
+        self.scheduler.add_job(
+            self._report_generation_job,
+            args=(ReportType.DAILY,),
+            trigger=CronTrigger(
+                hour=1, minute=0, timezone=ZoneInfo("Asia/Shanghai")
+            ),
+            id="hotspot_report_daily",
+            name="V1 热点日报",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
+        self.scheduler.add_job(
+            self._report_generation_job,
+            args=(ReportType.WEEKLY,),
+            trigger=CronTrigger(
+                day_of_week="mon",
+                hour=1,
+                minute=0,
+                timezone=ZoneInfo("Asia/Shanghai"),
+            ),
+            id="hotspot_report_weekly",
+            name="V1 热点周报",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=7200,
         )
 
         # 启动调度器

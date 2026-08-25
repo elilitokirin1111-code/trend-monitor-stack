@@ -38,6 +38,22 @@ class ConfigService:
         """获取所有系统设置"""
         return db.get_all_settings()
 
+    def get_public_settings(self) -> Dict[str, str]:
+        """获取可安全返回给前端的系统设置。"""
+        values = self.get_all_settings().copy()
+        if values.get("hotspot_ai_api_key"):
+            values["hotspot_ai_api_key"] = "************"
+        if values.get("ai_config"):
+            try:
+                ai_config = json.loads(values["ai_config"])
+            except json.JSONDecodeError:
+                values["ai_config"] = "************"
+            else:
+                if isinstance(ai_config, dict) and ai_config.get("api_key"):
+                    ai_config["api_key"] = "************"
+                values["ai_config"] = json.dumps(ai_config, ensure_ascii=False)
+        return values
+
     # ===== 推送渠道配置 =====
 
     def get_push_channel_config(self, channel_id: str) -> Optional[Dict[str, Any]]:

@@ -121,6 +121,17 @@
 | **阅读** | 豆瓣新书 |
 | **新闻** | 联合早报、澎湃新闻 |
 
+Collector V2 另有一条面向情报分析的四平台链路，按 30 分钟窗口采集并保留原始响应：
+
+| 平台 | 默认 Provider 顺序 | 当前运行方式 |
+|------|--------------------|--------------|
+| 抖音 | DailyHotApi → NewsNow | Compose 内独立 DailyHotApi 服务 |
+| 微博 | RSSHub → DailyHotApi → NewsNow | Compose 内独立 RSSHub 服务 |
+| B站 | RSSHub → DailyHotApi → NewsNow | Compose 内独立 RSSHub 服务 |
+| 小红书 | OpenCLI | 主机 Chrome 登录态桥接 |
+
+Provider 失败时会记录真实失败原因；缓存或过期结果会标记为 `stale`，不会用示例数据补位。
+
 ## 📱 支持的推送渠道
 
 | 渠道 | 状态 | 配置难度 |
@@ -282,6 +293,53 @@ rsshub:
 ```
 
 > 💡 Cookie 会过期，如果数据获取失败，请重新获取并更新配置
+
+## 🔐 小红书 OpenCLI 登录态桥接
+
+小红书发现页需要浏览器登录态。Docker 后端不会读取或保存 Cookie，而是通过本机只读桥接器调用已连接 Chrome 的 OpenCLI：
+
+1. 在 Chrome 安装 OpenCLI 官方 Browser Bridge 扩展，登录小红书并确认 OpenCLI daemon/扩展已连接。
+2. 在项目根目录创建或更新 `.env`：
+
+   ```dotenv
+   HOTSPOT_OPENCLI_BRIDGE_URL=http://host.docker.internal:19826
+   HOTSPOT_OPENCLI_BRIDGE_TOKEN=请替换为随机长令牌
+   ```
+
+3. 在单独的 PowerShell 窗口启动桥接器：
+
+   ```powershell
+   .\scripts\start-opencli-bridge.ps1 -Token "与上面相同的随机长令牌"
+   ```
+
+4. 让后端读取新配置：
+
+   ```powershell
+   docker compose up -d --force-recreate backend frontend
+   ```
+
+桥接器只接受带 Bearer Token 的固定只读命令（小红书 feed、微博 hot、B站 hot），不接受任意 shell 命令，不执行点赞、评论、关注或发布操作。扩展未连接、登录过期或平台拒绝访问时，该轮采集会明确失败且写入零条实时数据。
+
+## 🧠 人工标记与 WeKnora 知识库
+
+热点详情现在支持独立的人工审核、分类、标签、酒旅相关性、决策通道、摘要和备注。人工版本使用追加式审计记录保存，不会覆盖 AI 判断或原始热点。
+
+如需连接 WeKnora，在 WeKnora 中创建一个专用知识库和 API Key，然后只在项目根目录的本机 `.env` 中配置：
+
+```dotenv
+WEKNORA_BASE_URL=https://你的-weknora-地址
+WEKNORA_API_KEY=不要提交或粘贴到聊天中的密钥
+WEKNORA_KNOWLEDGE_BASE_ID=知识库ID
+WEKNORA_TIMEOUT_SECONDS=30
+```
+
+重建后端和前端：
+
+```powershell
+docker compose up -d --build backend frontend
+```
+
+使用顺序：进入“热点情报中心” → 打开热点 → “人工标记”保存 → “知识库”同步或检索。系统不会自动把所有热点灌入知识库；未配置、未人工确认或远端失败都会明确显示，不会伪造成功数据。完整运维说明见 `docs/RUNBOOK.md`。
 
 ## ⚙️ 推送渠道配置
 

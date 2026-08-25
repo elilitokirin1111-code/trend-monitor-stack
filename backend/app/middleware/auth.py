@@ -3,7 +3,7 @@
 使用 JWT Token 进行用户认证和权限控制
 """
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -28,6 +28,7 @@ PUBLIC_PATHS = [
     "/api/auth/register",
     "/api/auth/check",
     "/api/hot",  # 热搜榜公开访问
+    "/api/v1/hotspots/monitoring/metrics",  # Prometheus 抓取端点（仅运行时指标）
     "/api/stats",  # 统计信息公开访问
     "/api/trends",  # 趋势分析公开访问
     "/static",
@@ -48,7 +49,7 @@ def is_auth_enabled() -> bool:
 
 def create_token(data: dict) -> str:
     """创建 JWT Token"""
-    expire = datetime.utcnow() + timedelta(hours=settings.jwt_expire_hours)
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expire_hours)
     to_encode = data.copy()
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=JWT_ALGORITHM)
@@ -88,6 +89,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """认证中间件"""
 
     async def dispatch(self, request: Request, call_next):
+        # CORS middleware must receive browser preflight requests before auth.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # 如果未启用认证，则不需要验证
         if not is_auth_enabled():
             return await call_next(request)

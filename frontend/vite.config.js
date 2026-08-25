@@ -1,47 +1,49 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { resolve } from 'path'
+import { fileURLToPath } from 'url'
+
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
 
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
   server: {
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/auth': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/config': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/sources': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/rules': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/history': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/scheduler': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       },
       '/users': {
-        target: 'http://localhost:8000',
+        target: apiProxyTarget,
         changeOrigin: true
       }
     }

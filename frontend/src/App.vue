@@ -4,18 +4,18 @@
         <LoginPage v-if="isLoginRoute" @login-success="handleLoginSuccess" />
 
         <!-- Main App -->
-        <div v-else class="flex min-h-screen flex-col md:h-screen md:flex-row">
+        <div v-else class="app-shell flex min-h-screen flex-col md:h-screen md:flex-row">
             <!-- Sidebar -->
             <Sidebar @logout="handleLogout" @login="handleLoginClick" />
 
             <!-- Main Content -->
-            <main class="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
+            <main class="app-main flex-1 overflow-auto px-3 pb-3 pt-2 sm:px-4 sm:pb-4 md:px-6 md:pb-6 lg:px-8">
                 <!-- Header -->
                 <AppHeader
                     :view-title="currentRoute?.meta?.title || '热搜榜'"
                     :view-subtitle="currentRoute?.meta?.subtitle || ''"
                     :last-update="appStore.lastUpdate"
-                    :show-refresh="currentRoute?.name === 'hotlist'"
+                    :show-refresh="['hotlist', 'intelligence'].includes(currentRoute?.name)"
                     :show-login="!authStore.isAuthenticated"
                     @refresh="handleRefresh"
                     @login="handleLoginClick"
@@ -109,7 +109,7 @@ provide('appStore', appStore)
 const handleLoginSuccess = () => {
     showToast('登录成功', 'success')
     appStore.fetchStats()
-    router.push(route.query.redirect || '/hotlist')
+    router.push(route.query.redirect || '/intelligence')
 }
 
 const handleLogout = () => {

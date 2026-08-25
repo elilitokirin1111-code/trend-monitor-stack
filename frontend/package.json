@@ -3,9 +3,13 @@
   "version": "0.5.0",
   "description": "HotPush - 热点聚合推送平台",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test tests/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,10 +20,10 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
+    "@vitejs/plugin-vue": "^6.0.8",
     "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.33",
+    "postcss": "^8.5.26",
     "tailwindcss": "^3.4.1",
-    "vite": "^5.0.0"
+    "vite": "^8.2.1"
   }
 }

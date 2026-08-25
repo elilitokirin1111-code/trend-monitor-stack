@@ -14,6 +14,12 @@ from urllib.parse import urlparse
 from app.config import settings
 
 
+# Python 3.12+ deprecates sqlite3's implicit datetime adapter. Register an
+# explicit ISO-8601 adapter so persisted values keep their existing text shape
+# without depending on the deprecated default behavior.
+sqlite3.register_adapter(datetime, lambda value: value.isoformat(" "))
+
+
 class Database:
     """数据库管理，支持 SQLite 和 MySQL"""
 

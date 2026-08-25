@@ -1,112 +1,126 @@
+"""Structured logging: correlation ID injection and optional JSON output.
+
+Keeps the existing colored console formatter as the default; when
+``HOTSPOT_STRUCTURED_LOGS=1`` is set, a JSON formatter is used instead so
+logs can be shipped to a collector. A logging filter injects the current
+correlation ID (from the middleware context variable) into every record.
 """
-日志配置模块
-"""
-import sys
-import re
+
+from __future__ import annotations
+
+import json
 import logging
+import os
+import re
+import sys
+from datetime import datetime, timezone
+
 from app.config import settings
+
+
+class CorrelationFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            from app.middleware.correlation import current_correlation_id
+
+            record.correlation_id = current_correlation_id() or "-"
+        except Exception:  # noqa: BLE001 - logging must never raise
+            record.correlation_id = "-"
+        return True
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "correlation_id": getattr(record, "correlation_id", "-"),
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
 
 
 class ColoredFormatter(logging.Formatter):
     """带颜色的日志格式化器"""
-    
-    # ANSI 颜色码
+
     COLORS = {
-        'DEBUG': '\033[90m',     # 灰色
-        'INFO': '\033[32m',      # 绿色
-        'WARNING': '\033[33m',   # 黄色
-        'ERROR': '\033[31m',     # 红色
-        'CRITICAL': '\033[35m',  # 紫色
+        "DEBUG": "\033[90m",
+        "INFO": "\033[32m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[35m",
     }
-    RESET = '\033[0m'
-    GRAY = '\033[90m'
-    CYAN = '\033[36m'
-    GREEN = '\033[32m'
-    RED = '\033[31m'
-    YELLOW = '\033[33m'
-    
+    RESET = "\033[0m"
+    GRAY = "\033[90m"
+    CYAN = "\033[36m"
+    GREEN = "\033[32m"
+    RED = "\033[31m"
+    YELLOW = "\033[33m"
+
     def format(self, record):
-        # 获取颜色
         color = self.COLORS.get(record.levelname, self.RESET)
-        
-        # 格式化时间（灰色）
         time_str = f"{self.GRAY}{self.formatTime(record, '%H:%M:%S')}{self.RESET}"
-        
-        # 格式化消息
         message = record.getMessage()
-        
-        # 处理 [平台名称] 格式，高亮显示
         message = self._format_source_name(message, record.levelname)
-        
-        # 根据消息内容添加图标
         icon = self._get_icon(record.levelname, record.getMessage())
-        
-        return f"{time_str} {icon} {message}"
-    
+        correlation = getattr(record, "correlation_id", None)
+        correlation_part = (
+            f"{self.GRAY}[{correlation[:8]}]{self.RESET} "
+            if correlation and correlation != "-"
+            else ""
+        )
+        return f"{time_str} {correlation_part}{icon} {message}"
+
     def _format_source_name(self, message: str, level: str) -> str:
-        """格式化消息中的 [平台名称]"""
-        # 匹配 [xxx] 格式
-        match = re.match(r'\[([^\]]+)\]\s*(.*)', message)
+        match = re.match(r"\[([^\]]+)\]\s*(.*)", message)
         if match:
             source_name = match.group(1)
             rest_msg = match.group(2)
-            
-            # 根据级别选择颜色
             if level == "ERROR":
-                return f"{self.CYAN}[{source_name}]{self.RESET} {self.RED}{rest_msg}{self.RESET}"
-            elif "成功" in rest_msg:
-                return f"{self.CYAN}[{source_name}]{self.RESET} {self.GREEN}{rest_msg}{self.RESET}"
-            else:
-                return f"{self.CYAN}[{source_name}]{self.RESET} {rest_msg}"
+                return (
+                    f"{self.CYAN}[{source_name}]{self.RESET} "
+                    f"{self.RED}{rest_msg}{self.RESET}"
+                )
+            if "成功" in rest_msg:
+                return (
+                    f"{self.CYAN}[{source_name}]{self.RESET} "
+                    f"{self.GREEN}{rest_msg}{self.RESET}"
+                )
+            return f"{self.CYAN}[{source_name}]{self.RESET} {rest_msg}"
         return message
-    
+
     def _get_icon(self, level: str, message: str) -> str:
-        """根据日志内容返回图标"""
         if "成功" in message:
             return f"{self.GREEN}✓{self.RESET}"
-        elif "失败" in message or level == "ERROR":
+        if "失败" in message or level == "ERROR":
             return f"{self.RED}✗{self.RESET}"
-        elif level == "WARNING":
+        if level == "WARNING":
             return f"{self.YELLOW}!{self.RESET}"
-        elif "启动" in message:
+        if "启动" in message:
             return f"{self.CYAN}→{self.RESET}"
-        elif "定时" in message or "任务" in message:
+        if "定时" in message or "任务" in message:
             return f"{self.GRAY}⏱{self.RESET}"
-        else:
-            return " "
+        return " "
 
 
 def setup_logger(name: str = "hotpush") -> logging.Logger:
-    """
-    配置并返回 logger 实例
-
-    Args:
-        name: logger 名称
-
-    Returns:
-        配置好的 logger 实例
-    """
     logger = logging.getLogger(name)
-
-    # 避免重复添加 handler
     if logger.handlers:
         return logger
 
-    # 根据 debug 设置日志级别
     level = logging.DEBUG if settings.debug else logging.INFO
     logger.setLevel(level)
+    logger.addFilter(CorrelationFilter())
 
-    # 控制台输出
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
-
-    # 使用带颜色的格式化器
-    console_handler.setFormatter(ColoredFormatter())
-
+    structured = os.environ.get("HOTSPOT_STRUCTURED_LOGS") == "1"
+    console_handler.setFormatter(JsonFormatter() if structured else ColoredFormatter())
     logger.addHandler(console_handler)
-
     return logger
 
 
-# 全局 logger 实例
 logger = setup_logger()

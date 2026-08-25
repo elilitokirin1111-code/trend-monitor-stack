@@ -2,12 +2,17 @@
 配置文件
 """
 import secrets
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, List
 
 
 class Settings(BaseSettings):
     """应用配置"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
 
     # 应用配置
     app_name: str = "HotPush"
@@ -28,6 +33,7 @@ class Settings(BaseSettings):
 
     # 抓取配置
     fetch_interval_minutes: int = 5  # 抓取间隔（分钟）
+    hotspot_collection_interval_minutes: int = 30  # V2 热点快照间隔（分钟）
     fetch_timeout: int = 30  # 请求超时（秒）
     fetch_retry_count: int = 2  # 失败重试次数
 
@@ -69,6 +75,7 @@ class Settings(BaseSettings):
     
     # 飞书配置
     feishu_webhook_url: Optional[str] = None
+    feishu_webhook_secret: Optional[str] = None  # 飞书群机器人签名密钥（安全设置-签名校验）
     
     # 钉钉配置
     dingtalk_webhook_url: Optional[str] = None
@@ -81,10 +88,4 @@ class Settings(BaseSettings):
     # 代理配置（用于访问 Telegram 等需要代理的服务）
     http_proxy: Optional[str] = None
     https_proxy: Optional[str] = None
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
-
 settings = Settings()
