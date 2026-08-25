@@ -193,7 +193,15 @@
       v-if="store.detailLoading || store.selectedEvent"
       :event="store.selectedEvent"
       :loading="store.detailLoading"
+      :annotation-saving="store.annotationSaving"
+      :knowledge-loading="store.knowledgeLoading"
+      :knowledge-hits="store.knowledgeHits"
+      :knowledge-query="store.knowledgeQuery"
+      :action-error="store.actionError"
       @close="store.closeEvent()"
+      @save-annotation="store.saveAnnotation(store.selectedEvent.event_id, $event)"
+      @sync-knowledge="store.syncKnowledge(store.selectedEvent.event_id)"
+      @search-knowledge="store.searchKnowledge(store.selectedEvent.event_id, $event)"
     />
   </div>
 </template>

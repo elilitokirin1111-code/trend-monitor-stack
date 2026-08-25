@@ -4,6 +4,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.hotspot_annotations import (
+    EventAnnotationView,
+    KnowledgeIntegrationStatus,
+    KnowledgeSyncView,
+)
+
 
 class DashboardModel(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -145,6 +151,9 @@ class EventEvidenceView(DashboardModel):
 class HotspotEventDetailResponse(EventSummaryView):
     members: list[EventMemberView]
     evidence: list[EventEvidenceView]
+    annotation: EventAnnotationView | None = None
+    knowledge_sync: KnowledgeSyncView | None = None
+    knowledge_integration: KnowledgeIntegrationStatus
 
 
 class RawHotItemResponse(DashboardModel):

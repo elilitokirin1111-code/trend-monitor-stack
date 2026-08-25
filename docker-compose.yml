@@ -67,6 +67,11 @@ services:
       # Windows 主机 OpenCLI 只读桥（小红书登录态；见 scripts/start-opencli-bridge.ps1）
       - HOTSPOT_OPENCLI_BRIDGE_URL=${HOTSPOT_OPENCLI_BRIDGE_URL:-}
       - HOTSPOT_OPENCLI_BRIDGE_TOKEN=${HOTSPOT_OPENCLI_BRIDGE_TOKEN:-}
+      # WeKnora 知识库（可选；密钥只从本机 .env 注入，不写入代码）
+      - WEKNORA_BASE_URL=${WEKNORA_BASE_URL:-}
+      - WEKNORA_API_KEY=${WEKNORA_API_KEY:-}
+      - WEKNORA_KNOWLEDGE_BASE_ID=${WEKNORA_KNOWLEDGE_BASE_ID:-}
+      - WEKNORA_TIMEOUT_SECONDS=${WEKNORA_TIMEOUT_SECONDS:-30}
       - FETCH_INTERVAL_MINUTES=5
       - HOTSPOT_COLLECTION_INTERVAL_MINUTES=30
       # AI 摘要配置（可选，支持 OpenAI/Claude/DeepSeek/Ollama 等）

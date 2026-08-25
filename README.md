@@ -320,6 +320,27 @@ rsshub:
 
 桥接器只接受带 Bearer Token 的固定只读命令（小红书 feed、微博 hot、B站 hot），不接受任意 shell 命令，不执行点赞、评论、关注或发布操作。扩展未连接、登录过期或平台拒绝访问时，该轮采集会明确失败且写入零条实时数据。
 
+## 🧠 人工标记与 WeKnora 知识库
+
+热点详情现在支持独立的人工审核、分类、标签、酒旅相关性、决策通道、摘要和备注。人工版本使用追加式审计记录保存，不会覆盖 AI 判断或原始热点。
+
+如需连接 WeKnora，在 WeKnora 中创建一个专用知识库和 API Key，然后只在项目根目录的本机 `.env` 中配置：
+
+```dotenv
+WEKNORA_BASE_URL=https://你的-weknora-地址
+WEKNORA_API_KEY=不要提交或粘贴到聊天中的密钥
+WEKNORA_KNOWLEDGE_BASE_ID=知识库ID
+WEKNORA_TIMEOUT_SECONDS=30
+```
+
+重建后端和前端：
+
+```powershell
+docker compose up -d --build backend frontend
+```
+
+使用顺序：进入“热点情报中心” → 打开热点 → “人工标记”保存 → “知识库”同步或检索。系统不会自动把所有热点灌入知识库；未配置、未人工确认或远端失败都会明确显示，不会伪造成功数据。完整运维说明见 `docs/RUNBOOK.md`。
+
 ## ⚙️ 推送渠道配置
 
 ### Telegram 配置

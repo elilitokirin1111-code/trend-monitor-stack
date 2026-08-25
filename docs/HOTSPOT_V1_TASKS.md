@@ -707,3 +707,31 @@ V1 全部 12 个 Phase（0–11）完成：审计→Collector→四平台接入�
 ### Commit
 
 本节随 `feat(collectors): add live providers for core platforms` 独立提交。
+
+## 扩展阶段：人工编辑与 WeKnora 知识互通
+
+- [x] 新增 SQLite/MySQL 第 8 个迁移，分别保存追加式人工标记与知识同步审计。
+- [x] 新增认证 API：保存人工标记、读取知识配置状态、手动同步事件、关联知识检索。
+- [x] 人工分类与 AI 分类分层保存，原始热点和证据记录不被覆盖。
+- [x] 新增 WeKnora API 客户端，支持 manual Markdown 创建/更新与知识库 hybrid search。
+- [x] 同内容重复同步幂等跳过，新人工版本更新既有远端 knowledge ID。
+- [x] 事件详情增加“人工标记”和“知识库”页签，展示配置、同步状态和检索结果。
+- [x] Compose 增加环境变量透传，未配置时前后端明确显示不可用，不包含默认密钥。
+- [x] 在 `THIRD_PARTY.md` 登记 WeKnora MIT 许可证和独立服务边界。
+- [ ] 用户创建 WeKnora 专用知识库并在本机 `.env` 配置后，完成真实创建、更新、检索验收。
+
+### 测试与运行证据
+
+- 后端全量回归：`pytest -q -W error::DeprecationWarning`：319 passed。
+- 前端：`npm test`：10 passed；`npm run build`：Vite 生产构建成功。
+- `docker compose config --quiet` 通过；新 Backend/Frontend 镜像已构建并运行，MySQL 登记 8 个热点迁移版本。
+- 真实本地 API：管理员登录成功；总览返回 258 个当前持久化事件；事件详情包含 `annotation`、`knowledge_sync`、`knowledge_integration`；未人工标记同步返回 409。
+- 本地页面加载成功且浏览器控制台无错误。WeKnora 尚未配置时状态 API 返回 `configured=false` 且不暴露 API Key 字段。
+- 当前网络访问 Docker Hub 鉴权端点仍偶发超时；镜像导出虽报告延迟拉取错误，但生成镜像已通过独立容器运行检查并成功重建服务。
+
+### 遗留问题与下一步
+
+- 未接收或保存任何真实 WeKnora API Key；用户应只在本机 `.env` 设置密钥。
+- 真实 WeKnora 版本、网络地址与知识库权限仍需在用户实例上验证。
+- 第一版采用人工触发同步，暂不启用批量或定时写入，避免未经审核的数据污染知识库。
+- 下一步在真实实例完成连通性验收后，再评估知识命中结果引用、解绑/重同步管理与权限细分。

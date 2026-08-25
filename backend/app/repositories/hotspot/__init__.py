@@ -1,5 +1,6 @@
 """Append-only hotspot persistence."""
 
+from .annotations import AnnotationRepository
 from .classifications import ClassificationRepository, ClassificationRepositoryInput
 from .clustering import ClusteringRepository
 from .dashboard import HotspotDashboardRepository
@@ -11,6 +12,7 @@ from .repository import HotspotRepository, WindowedCollectionWriter
 from .trends import StoredPreviousTrend, TrendRepository, TrendRepositoryInput
 
 __all__ = [
+    "AnnotationRepository",
     "ClassificationRepository",
     "ClassificationRepositoryInput",
     "ClusteringRepository",

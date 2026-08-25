@@ -348,6 +348,25 @@ Phase 0 仅修改：
 - `docs/HOTSPOT_V1_TASKS.md`
 - `THIRD_PARTY.md`
 
+## 人工研判与知识库扩展（2026-08-25）
+
+事件详情增加两条与原有 AI/证据层解耦的数据支线：
+
+```text
+EventCluster / Trend result
+  ├─ AI classification（机器输出，原样保留）
+  ├─ Human annotation（按 trend_series_id 追加版本）
+  └─ Knowledge sync audit（按人工版本记录远端结果）
+            └─ WeKnora manual Markdown / hybrid search
+```
+
+- `hotspot_event_annotations` 保存追加式人工版本；事件 ID 可能随聚类运行变化，因此以稳定的 `trend_series_id` 关联，同时保留产生标记时的 `source_event_id`。
+- `hotspot_knowledge_syncs` 保存每次创建/更新成功或失败、内容哈希、远端 knowledge ID 与脱敏响应；API Key 不入库。
+- 只有认证用户在界面显式保存并点击同步后，系统才调用 WeKnora。未人工标记返回 409，未配置返回 503，远端错误返回 502/503。
+- 同一人工版本和内容哈希重复同步会幂等跳过；新人工版本更新同一远端知识条目。
+- 导出 Markdown 由确定性模板生成，明确分隔人工研判、趋势事实、AI 研判与原始证据，不调用 LLM，也不修改原始数据。
+- WeKnora 当前通过 `/api/v1` 的 manual knowledge 与 knowledge-base hybrid search 合同集成，可由其他知识 Provider 在 `backend/app/knowledge/` 边界内替换。
+
 后续候选（实际按 Phase 提交）：
 
 ```text

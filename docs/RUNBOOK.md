@@ -57,6 +57,10 @@ docker compose up -d
 | `HOTSPOT_RSSHUB_BASE_URL` | `http://rsshub:1200`（Compose） | 微博/B站主 Provider 地址 |
 | `HOTSPOT_RSSHUB_MAX_AGE_MINUTES` | 15 | RSS feed 超过该年龄即 stale |
 | `HOTSPOT_OPENCLI_BRIDGE_URL` / `HOTSPOT_OPENCLI_BRIDGE_TOKEN` | - | 小红书主机 Chrome 登录态桥接 |
+| `WEKNORA_BASE_URL` | - | WeKnora 服务地址；可带或不带 `/api/v1` |
+| `WEKNORA_API_KEY` | - | WeKnora API Key，仅通过环境变量注入 |
+| `WEKNORA_KNOWLEDGE_BASE_ID` | - | 用于热点知识互通的专用知识库 ID |
+| `WEKNORA_TIMEOUT_SECONDS` | 30 | WeKnora HTTP 请求超时秒数 |
 
 ## 3. 定时任务
 
@@ -70,7 +74,21 @@ docker compose up -d
 
 手动触发：`/api/scheduler/hotspots/trigger`；报告重跑：`POST /api/v1/hotspots/reports/{daily|weekly}/regenerate`；报告投递：`POST /api/v1/hotspots/reports/{report_run_id}/deliver`。
 
-## 4. 监控
+## 4. WeKnora 知识库互通
+
+在 WeKnora 创建专用知识库和 API Key 后，将配置放进项目根目录本机 `.env`（不要提交）：
+
+```dotenv
+WEKNORA_BASE_URL=https://你的-weknora-地址
+WEKNORA_API_KEY=仅保存在本机的密钥
+WEKNORA_KNOWLEDGE_BASE_ID=知识库ID
+```
+
+然后执行 `docker compose up -d --build backend frontend`。登录网站，在“热点情报中心”打开事件详情：先到“人工标记”保存，再到“知识库”手动同步或检索。首次同步创建 Markdown 知识，后续人工版本更新同一知识；相同版本重复同步会幂等跳过。后端只返回各配置项是否存在，不返回 API Key 内容。
+
+若 WeKnora 与本项目同机、但运行在另一个 Docker Compose 中，建议建立共享 Docker 网络并使用服务名；临时 Windows 本机访问可使用 `http://host.docker.internal:<端口>`。生产环境应使用私网或 HTTPS，并限制 API Key 权限。
+
+## 5. 监控
 
 ### 端点
 
@@ -95,7 +113,7 @@ docker compose up -d
 
 告警 webhook：`hotspot_alert_webhook`（可选）。通知去重：指纹存 `hotspot_alert_last_fingerprint`，变化才推送。
 
-## 5. 故障处理
+## 6. 故障处理
 
 | 症状 | 排查步骤 |
 | --- | --- |
@@ -108,19 +126,19 @@ docker compose up -d
 | AI 分类失败 | 不影响采集链；检查 `hotspot_ai_*` 配置与模型输出 schema |
 | 多实例重复采集 | 数据库窗口锁 + APScheduler max_instances=1 + coalesce 自动处理 |
 
-## 6. 备份与恢复
+## 7. 备份与恢复
 
 - 原始层为 append-only，派生层可重建：先备份原始库，再按需重跑 Normalization→Clustering→Trend→Classification→Report。
 - SQLite：文件复制即备份；恢复 = 用备份文件替换后启动（迁移幂等，启动自动补齐）。
 - MySQL：使用 `mysqldump` 全量备份；迁移回滚等价于从备份重建（所有迁移可从头应用，见 `test_fault_recovery.py`）。
 - 迁移漂移保护：已应用迁移的 SHA-256 校验和变化会触发 `MigrationDriftError`，禁止篡改历史迁移文件。
 
-## 7. 回滚
+## 8. 回滚
 
 - 代码回滚：`git revert` 对应 `feat(phase-N)` 提交；数据库向后兼容（新表不会破坏旧代码读取）。
 - 数据回滚：派生层（快照后的所有表）可直接清空重建；原始层（`hotspot_raw_*`、`hotspot_collection_runs`）不可物理回滚，纠错通过新记录。
 
-## 8. 质量门禁（每个 Phase 提交前）
+## 9. 质量门禁（每个 Phase 提交前）
 
 1. 该 Phase 实现与测试完成
 2. `pytest -q` 全量通过（当前 307 tests）
@@ -128,7 +146,7 @@ docker compose up -d
 4. 更新 `docs/HOTSPOT_V1_TASKS.md`（完成项/遗留项/测试证据/commit）
 5. 独立 Git commit
 
-## 9. 已知限制（上线前复核）
+## 10. 已知限制（上线前复核）
 
 - 抖音、微博、B站已有本地 Provider 服务的 live 验证；小红书仍依赖用户主机 Chrome 登录授权。所有平台仍受上游可用性影响，Dashboard/报告会如实标记失败与 stale。
 - 平台条款、账号授权与个人信息采集合规性需业务负责人复核。

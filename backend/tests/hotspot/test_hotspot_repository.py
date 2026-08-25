@@ -117,7 +117,7 @@ def test_migration_is_versioned_and_idempotent(tmp_path: Path) -> None:
     database = _database(tmp_path)
     runner = HotspotMigrationRunner(database)
 
-    assert runner.apply() == (1, 2, 3, 4, 5, 6, 7)
+    assert runner.apply() == (1, 2, 3, 4, 5, 6, 7, 8)
     assert runner.apply() == ()
 
     with database.get_connection() as connection:
@@ -132,6 +132,7 @@ def test_migration_is_versioned_and_idempotent(tmp_path: Path) -> None:
         (5, "ai_classification", 64),
         (6, "reports", 64),
         (7, "deliveries", 64),
+        (8, "annotations_knowledge", 64),
     ]
 
 

@@ -106,7 +106,7 @@ def test_backup_and_restore_keeps_data_and_migrations(tmp_path: Path) -> None:
             "SELECT COUNT(*) FROM hotspot_schema_migrations"
         ).fetchone()[0]
     assert reports_ok == 0  # 分类库没有报告
-    assert migrations_ok == 7  # 全部迁移都在备份中
+    assert migrations_ok == 8  # 全部迁移都在备份中
     assert HotspotMigrationRunner(restored).apply() == ()  # 无新迁移
 
     events = HotspotDashboardRepository(restored).list_events(limit=20, offset=0)
@@ -146,7 +146,7 @@ def test_migration_rollback_rebuilds_from_scratch(tmp_path: Path) -> None:
 
     applied = HotspotMigrationRunner(database).apply()
 
-    assert applied == (1, 2, 3, 4, 5, 6, 7)
+    assert applied == (1, 2, 3, 4, 5, 6, 7, 8)
     assert HotspotMigrationRunner(database).apply() == ()
     with database.get_connection() as connection:
         tables = [

@@ -4,12 +4,14 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.knowledge.weknora import WeKnoraConfig
 from app.models.hotspot_v1 import (
     HotspotEventDetailResponse,
     HotspotEventListResponse,
     HotspotOverviewResponse,
     RawHotItemResponse,
 )
+from app.repositories.hotspot.annotations import AnnotationRepository
 from app.repositories.hotspot.dashboard import HotspotDashboardRepository
 from app.services.database import db
 
@@ -51,6 +53,17 @@ async def get_event(event_id: str):
     item = HotspotDashboardRepository(db).get_event(event_id)
     if item is None:
         raise HTTPException(status_code=404, detail="热点事件不存在")
+    annotations = AnnotationRepository(db)
+    config = WeKnoraConfig.from_env()
+    item["annotation"] = annotations.get_latest_for_event(event_id)
+    item["knowledge_sync"] = annotations.latest_sync_for_event(event_id)
+    item["knowledge_integration"] = {
+        "provider": "weknora",
+        "configured": config.configured,
+        "base_url_configured": bool(config.base_url),
+        "api_key_configured": bool(config.api_key),
+        "knowledge_base_id_configured": bool(config.knowledge_base_id),
+    }
     return item
 
 

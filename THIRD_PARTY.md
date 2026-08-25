@@ -1,6 +1,6 @@
 # Third-Party Software and Reference Register
 
-Last reviewed: 2026-08-14
+Last reviewed: 2026-08-25
 
 This register distinguishes incorporated software, planned runtime integrations, and design-only references. It is an engineering inventory, not legal advice. Platform terms of service, data rights, privacy, account authorization, robots policies, and rate limits require a separate compliance review.
 
@@ -77,6 +77,19 @@ into this repository.
 - Operational risk: Browser login expiry, extension/daemon availability, platform anti-automation rules, account permissions and UI/API changes.
 - Operational finding on 2026-08-14: Current OpenCLI 1.8.6 was executable, but its Browser Bridge extension was not connected (exit code 69). The legacy local executable reported the equivalent bridge failure. Xiaohongshu therefore remained an explicit failed collection with zero live items.
 - Operational finding on 2026-08-25: `@jackwener/opencli` 1.8.7 and the authenticated host bridge both ran successfully, but the official Chrome Browser Bridge extension was still not connected. Xiaohongshu remains an explicit failed collection until an operator completes Chrome extension installation and login authorization.
+
+### WeKnora
+
+- Project: https://github.com/Tencent/WeKnora
+- Copyright: Tencent and contributors
+- License: MIT License
+- API contract reviewed: official `/api/v1` documentation on 2026-08-25.
+- Use: Optional, separately deployed knowledge-base service. The application creates or updates manually approved hotspot Markdown and performs hybrid retrieval through authenticated HTTP APIs.
+- Local implementation: `backend/app/knowledge/`; original API client and mapping code only.
+- Copied upstream code: None.
+- Deployment boundary: WeKnora is not imported, vendored, linked, or bundled into this repository. Its API key is injected at runtime and is neither stored in hotspot tables nor returned by the application API.
+- Data rule: Only an explicit user action can synchronize a hotspot. Raw evidence, AI classification, human annotation, and remote synchronization audit records remain separate. Failed or unconfigured synchronization is reported as failed; no knowledge record is fabricated.
+- Operational/security note: Prefer a private network deployment, HTTPS for remote instances, least-privilege API keys, and a dedicated knowledge base for this application. Confirm the exact deployed WeKnora version before production rollout.
 
 ## 3. Design-only references — source code prohibited
 
