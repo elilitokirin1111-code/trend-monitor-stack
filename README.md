@@ -121,6 +121,17 @@
 | **阅读** | 豆瓣新书 |
 | **新闻** | 联合早报、澎湃新闻 |
 
+Collector V2 另有一条面向情报分析的四平台链路，按 30 分钟窗口采集并保留原始响应：
+
+| 平台 | 默认 Provider 顺序 | 当前运行方式 |
+|------|--------------------|--------------|
+| 抖音 | DailyHotApi → NewsNow | Compose 内独立 DailyHotApi 服务 |
+| 微博 | RSSHub → DailyHotApi → NewsNow | Compose 内独立 RSSHub 服务 |
+| B站 | RSSHub → DailyHotApi → NewsNow | Compose 内独立 RSSHub 服务 |
+| 小红书 | OpenCLI | 主机 Chrome 登录态桥接 |
+
+Provider 失败时会记录真实失败原因；缓存或过期结果会标记为 `stale`，不会用示例数据补位。
+
 ## 📱 支持的推送渠道
 
 | 渠道 | 状态 | 配置难度 |
@@ -282,6 +293,32 @@ rsshub:
 ```
 
 > 💡 Cookie 会过期，如果数据获取失败，请重新获取并更新配置
+
+## 🔐 小红书 OpenCLI 登录态桥接
+
+小红书发现页需要浏览器登录态。Docker 后端不会读取或保存 Cookie，而是通过本机只读桥接器调用已连接 Chrome 的 OpenCLI：
+
+1. 在 Chrome 安装 OpenCLI 官方 Browser Bridge 扩展，登录小红书并确认 OpenCLI daemon/扩展已连接。
+2. 在项目根目录创建或更新 `.env`：
+
+   ```dotenv
+   HOTSPOT_OPENCLI_BRIDGE_URL=http://host.docker.internal:19826
+   HOTSPOT_OPENCLI_BRIDGE_TOKEN=请替换为随机长令牌
+   ```
+
+3. 在单独的 PowerShell 窗口启动桥接器：
+
+   ```powershell
+   .\scripts\start-opencli-bridge.ps1 -Token "与上面相同的随机长令牌"
+   ```
+
+4. 让后端读取新配置：
+
+   ```powershell
+   docker compose up -d --force-recreate backend frontend
+   ```
+
+桥接器只接受带 Bearer Token 的固定只读命令（小红书 feed、微博 hot、B站 hot），不接受任意 shell 命令，不执行点赞、评论、关注或发布操作。扩展未连接、登录过期或平台拒绝访问时，该轮采集会明确失败且写入零条实时数据。
 
 ## ⚙️ 推送渠道配置
 

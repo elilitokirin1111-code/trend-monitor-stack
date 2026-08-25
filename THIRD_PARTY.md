@@ -40,20 +40,34 @@ into this repository.
 - Copyright: imsyy and contributors
 - License: MIT License
 - Contract reviewed at commit: `36c77e3bd891c11642d314cfb229bf31646704de`
-- Use: Outbound HTTP fallback Provider for Douyin, Weibo and Bilibili.
+- Use: Outbound HTTP Provider for Douyin and fallback Provider for Weibo and Bilibili. Docker Compose runs the unmodified official image as a separate service.
 - Local implementation: `backend/app/providers/hotspot/dailyhot.py`; original adapter code only.
 - Copied upstream code: None.
+- Container image verified on 2026-08-25: `imsyy/dailyhot-api:latest@sha256:748fc79d29a422f512018e8a58ef1a0e20306dd6254637933960573fa37b1e5e`.
 - Freshness rule: `fromCache=true` is always `stale`; an explicit empty `data` array remains a real empty success, while a missing or malformed `data` field is a failed response.
 - Operational finding on 2026-08-14: The documented public hostname did not resolve from this environment. An unmodified local upstream checkout started successfully but its three platform routes returned HTTP 502 while reaching their upstreams.
+- Operational finding on 2026-08-25: The pinned Compose service returned a fresh 50-item Douyin list. Its Weibo route returned HTTP 500 and Xiaohongshu is not an upstream route, so Provider fallback remains mandatory.
+
+### RSSHub
+
+- Project: https://github.com/DIYgod/RSSHub
+- Copyright: DIYgod and contributors
+- License: GNU Affero General Public License v3.0
+- Use: Unmodified, separately deployed container Provider for Weibo and Bilibili public hot-search feeds.
+- Local implementation: `backend/app/providers/hotspot/rsshub.py`; original HTTP/RSS adapter code only.
+- Copied upstream code: None.
+- Deployment boundary: RSSHub is not imported, vendored or linked into the application process. Compose invokes the published upstream container as a separate network service. If this project distributes a modified RSSHub service or offers a modified network service, the corresponding-source and license obligations must be reviewed and satisfied.
+- Freshness rule: Feed build time must be present and no older than the configured maximum age; missing or expired build time is `stale`, and malformed XML is failed/partial with raw evidence retained.
+- Operational finding on 2026-08-25: `/weibo/search/hot` returned 51 items and `/bilibili/hot-search` returned 10 items. The tested `/douyin/hot` and `/xiaohongshu/discover` routes returned HTTP 404 and are not used as production Providers.
 
 ### OpenCLI
 
 - Project: https://github.com/jackwener/opencli
 - License: Apache License 2.0
 - Contract reviewed at commit: `a86d64705c526dc710f790e66cfcabf6ecf786b9`
-- Package verified: `@jackwener/opencli` 1.8.6, Apache-2.0, Node.js >=20.
-- Use: Process-isolated fallback Provider for Xiaohongshu's logged-in browser feed.
-- Local implementation: `backend/app/providers/hotspot/opencli.py`; original subprocess adapter only. Commands use an argument vector without a shell, kill the child on collector cancellation, and do not log cookies or browser data.
+- Package verified: `@jackwener/opencli` 1.8.6 and 1.8.7, Apache-2.0, Node.js >=20.
+- Use: Login-state Provider for Xiaohongshu's browser feed, with optional Weibo/Bilibili fallback commands.
+- Local implementation: `backend/app/providers/hotspot/opencli.py` and `backend/tools/opencli_bridge.py`; original subprocess/HTTP adapter and authenticated host bridge only. Commands use a fixed argument vector without a shell, kill the child on collector cancellation, and do not log cookies or browser data.
 - Copied upstream code: None.
 - Current workspace artifact: `bin/autocli.exe` existed before the HotPush baseline was imported and remains untracked in Phase 0. It reports `autocli 0.3.8` and is from the earlier `nashsu/AutoCLI` lineage rather than a current OpenCLI release.
 - Artifact provenance: The local executable is byte-identical to the executable inside the official `nashsu/AutoCLI` v0.3.8 `autocli-x86_64-pc-windows-msvc.zip` release. Local executable SHA-256: `F1BF52BD7AEA43FBC984F6CAEEDA3496B3CC2E518510E7F3F668BFE477F89758`. Release tag commit: `c0969e2c83b29a7528452b1ba555085deca8e00d`. Official archive SHA-256: `CD439179091B28A0C9E373D69E93D767E2DC1E0E61DFC6C0F45607C588E7C1D1`.
@@ -62,6 +76,7 @@ into this repository.
 - Integration rule: Run out of process behind the Provider contract. Do not expose browser cookies, tokens, profiles or personal data to application logs. Retain Apache-2.0 license and NOTICE obligations for any distributed binary or source modification; document modified files when applicable.
 - Operational risk: Browser login expiry, extension/daemon availability, platform anti-automation rules, account permissions and UI/API changes.
 - Operational finding on 2026-08-14: Current OpenCLI 1.8.6 was executable, but its Browser Bridge extension was not connected (exit code 69). The legacy local executable reported the equivalent bridge failure. Xiaohongshu therefore remained an explicit failed collection with zero live items.
+- Operational finding on 2026-08-25: `@jackwener/opencli` 1.8.7 and the authenticated host bridge both ran successfully, but the official Chrome Browser Bridge extension was still not connected. Xiaohongshu remains an explicit failed collection until an operator completes Chrome extension installation and login authorization.
 
 ## 3. Design-only references — source code prohibited
 

@@ -662,3 +662,48 @@ V1 全部 12 个 Phase（0–11）完成：审计→Collector→四平台接入�
 ### Commit
 
 本节随 `fix(docker): repair first-run build and MySQL migrations` 独立提交。
+
+## 采集可用性修补：四平台 Provider 增强
+
+- [x] 审计四平台 30 分钟采集运行记录，确认原公共 Provider 的真实失败原因。
+- [x] 新增原生 RSSHub Provider，接入微博与 B站热搜，保留 XML 原文并按 feed build time 判定 freshness。
+- [x] 将官方 DailyHotApi 作为独立 Compose 服务，固定验证过的镜像 digest，并接入抖音主 Provider。
+- [x] 扩展 Provider Factory 的顺序、URL、RSS freshness 和 OpenCLI bridge 配置，继续支持后台显式覆盖与 fallback。
+- [x] 扩展 OpenCLI 为小红书/微博/B站固定只读命令，并新增带 Bearer Token 的主机 Chrome 桥接器。
+- [x] 增加 RSSHub、Provider Factory、OpenCLI 与桥接认证测试。
+- [x] 用真实 Compose 采集验证抖音、微博、B站，保存 raw payload 长度与 SHA-256 证据。
+- [x] 修复容器验收发现的 MySQL readiness DB-API 游标兼容问题并增加回归测试。
+- [ ] 完成 Chrome Browser Bridge 扩展安装与小红书登录授权，再补录小红书 fresh 实采证据。
+
+### 完成项
+
+- Collector 与 Provider 继续通过合同解耦；RSSHub、DailyHotApi、NewsNow、OpenCLI 均可独立失败、替换与记录 attempt。
+- 默认链路调整为抖音 `dailyhotapi → newsnow`，微博/B站 `rsshub → dailyhotapi → newsnow`，小红书 `opencli`。
+- 失败响应仍保留 raw evidence；缺时间、过期 RSS 或 `fromCache=true` 不会被标成 fresh。
+- 桥接器不接收任意命令、不记录 Cookie、不提供平台写操作；认证失败和扩展断开都显式失败。
+- 许可证记录已更正 RSSHub 为 AGPL-3.0，并记录独立未修改容器的部署边界。
+
+### 测试与运行证据
+
+- Provider/桥接器定向测试：21 passed，`DeprecationWarning` 作为错误处理。
+- 后端全量回归：`pytest -q -W error::DeprecationWarning`：307 passed。
+- 前端回归：`npm test`：7 passed；`npm run build` 成功。
+- Docker Compose 配置校验通过；DailyHotApi healthcheck 正常。
+- 真实采集：抖音 50 条 fresh（DailyHotApi）、微博 51 条 fresh（RSSHub）、B站 10 条 fresh（RSSHub）。
+- 原始 payload 长度与 SHA-256 见 `docs/evidence/PLATFORM_COLLECTION_2026-08-25.md`。
+
+### 遗留问题
+
+- 小红书依赖用户本机 Chrome 的官方 OpenCLI Browser Bridge 扩展与登录态；当前扩展未连接，因此按真实状态 failed/0 条。
+- RSSHub 与 DailyHotApi 都是外部网络 Provider，后续仍需监控路由变更、上游频控、镜像安全更新和许可证义务。
+- 对外部署前需把镜像版本/摘要和 Python/npm 依赖纳入 Phase 11 SBOM 流程。
+
+### 下一步计划
+
+1. 用户完成小红书 Chrome 授权后重跑真实采集验收。
+2. 在系统设置页增加 Provider 顺序、RSS freshness 与 OpenCLI bridge 状态的可视化配置和健康检查。
+3. 继续 Phase 11 运行稳定性与监控，增加连续失败、stale 比例和 Provider fallback 告警。
+
+### Commit
+
+本节随 `feat(collectors): add live providers for core platforms` 独立提交。

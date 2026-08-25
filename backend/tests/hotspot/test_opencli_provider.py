@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import httpx
 import pytest
 
 from app.domain.hotspot import (
@@ -54,6 +55,95 @@ async def test_opencli_maps_xiaohongshu_json_and_never_uses_a_shell():
     assert result.items[0].external_id == "note-1"
     assert result.items[0].hot_score == "1234"
     assert result.raw_payload is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "site"),
+    ((Platform.WEIBO, "weibo"), (Platform.BILIBILI, "bilibili")),
+)
+async def test_opencli_can_be_configured_as_logged_in_hot_list_fallback(
+    platform: Platform, site: str
+) -> None:
+    commands = []
+
+    async def runner(command):
+        commands.append(command)
+        return CommandResult(
+            0,
+            json.dumps(
+                [{"id": "hot-1", "title": "热点", "hot": 987, "url": "https://x/1"}]
+            ).encode(),
+            b"",
+        )
+
+    result = await OpenCliProvider(limit=8, runner=runner).collect(
+        CollectRequest(platform=platform)
+    )
+
+    assert commands == [("opencli", site, "hot", "--limit", "8", "--format", "json")]
+    assert result.status is ProviderStatus.SUCCESS
+    assert result.items[0].hot_score == "987"
+
+
+@pytest.mark.asyncio
+async def test_opencli_host_bridge_returns_raw_xiaohongshu_items() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/collect/xiaohongshu"
+        assert request.url.params["limit"] == "6"
+        assert request.headers["authorization"] == "Bearer local-secret"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "note-bridge",
+                    "title": "登录态推荐",
+                    "likes": 321,
+                    "url": "https://www.xiaohongshu.com/explore/note-bridge",
+                }
+            ],
+            headers={"X-OpenCLI-Exit-Code": "0"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = OpenCliProvider(
+            limit=6,
+            bridge_url="http://host.docker.internal:19826",
+            bridge_token="local-secret",
+            client=client,
+        )
+        result = await provider.collect(
+            CollectRequest(platform=Platform.XIAOHONGSHU)
+        )
+
+    assert result.status is ProviderStatus.SUCCESS
+    assert result.items[0].external_id == "note-bridge"
+    assert result.metadata["execution_mode"] == "host_bridge"
+
+
+@pytest.mark.asyncio
+async def test_opencli_host_bridge_auth_failure_is_not_live_data() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            401,
+            text="OpenCLI bridge authentication failed",
+            headers={"X-OpenCLI-Exit-Code": "78"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = OpenCliProvider(
+            bridge_url="http://host.docker.internal:19826",
+            bridge_token="wrong",
+            client=client,
+        )
+        result = await provider.collect(
+            CollectRequest(platform=Platform.XIAOHONGSHU)
+        )
+
+    assert result.status is ProviderStatus.FAILED
+    assert result.error.kind is ProviderErrorKind.CONFIGURATION
+    assert result.error.code == "opencli_bridge_authentication_failed"
+    assert result.items == ()
 
 
 @pytest.mark.asyncio

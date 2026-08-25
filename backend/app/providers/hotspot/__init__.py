@@ -10,6 +10,7 @@ from .factory import (
 )
 from .newsnow import NewsNowProvider
 from .opencli import CommandResult, OpenCliProvider
+from .rsshub import RSSHUB_ROUTES, RssHubProvider
 from .registry import (
     DuplicateProviderError,
     ProviderNotRegisteredError,
@@ -29,7 +30,9 @@ __all__ = [
     "ProviderNotSupportedError",
     "ProviderRegistry",
     "ProviderRuntimeConfig",
+    "RSSHUB_ROUTES",
     "RawCollectionWriter",
+    "RssHubProvider",
     "StaleResultReader",
     "build_provider_registry",
     "settings_with_default_provider_order",

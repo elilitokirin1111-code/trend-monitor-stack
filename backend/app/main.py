@@ -122,7 +122,8 @@ async def readiness():
 
     try:
         with database.get_connection() as connection:
-            connection.execute("SELECT 1")
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1")
         return {"status": "ready", "database": "ok"}
     except Exception as exc:  # noqa: BLE001 - readiness must report, not raise
         from app.utils.logger import logger

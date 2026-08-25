@@ -6,6 +6,9 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin
+
+import httpx
 
 from app.domain.hotspot import (
     CollectRequest,
@@ -41,7 +44,14 @@ CommandRunner = Callable[[tuple[str, ...]], Awaitable[CommandResult]]
 
 class OpenCliProvider:
     provider_id = "opencli"
-    supported_platforms = frozenset({Platform.XIAOHONGSHU})
+    supported_platforms = frozenset(
+        {Platform.XIAOHONGSHU, Platform.WEIBO, Platform.BILIBILI}
+    )
+    commands = {
+        Platform.XIAOHONGSHU: ("xiaohongshu", "feed"),
+        Platform.WEIBO: ("weibo", "hot"),
+        Platform.BILIBILI: ("bilibili", "hot"),
+    }
 
     def __init__(
         self,
@@ -49,12 +59,18 @@ class OpenCliProvider:
         executable: str = "opencli",
         limit: int = 30,
         runner: CommandRunner | None = None,
+        bridge_url: str | None = None,
+        bridge_token: str | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         if limit < 1 or limit > 100:
             raise ValueError("OpenCLI limit must be between 1 and 100")
         self._executable = executable
         self._limit = limit
         self._runner = runner or self._run_command
+        self._bridge_url = bridge_url.rstrip("/") + "/" if bridge_url else None
+        self._bridge_token = bridge_token or None
+        self._client = client
 
     async def collect(self, request: CollectRequest) -> ProviderResult:
         if request.platform not in self.supported_platforms:
@@ -70,17 +86,35 @@ class OpenCliProvider:
             )
 
         fetched_at = utc_now()
+        site, action = self.commands[request.platform]
         command = (
             self._executable,
-            "xiaohongshu",
-            "feed",
+            site,
+            action,
             "--limit",
             str(self._limit),
             "--format",
             "json",
         )
         try:
-            command_result = await self._runner(command)
+            command_result = (
+                await self._run_bridge(request.platform)
+                if self._bridge_url
+                else await self._runner(command)
+            )
+        except httpx.RequestError as exc:
+            return response_failure(
+                provider_id=self.provider_id,
+                platform=request.platform,
+                error=ProviderError(
+                    kind=ProviderErrorKind.CONNECTION,
+                    code="opencli_bridge_connection_error",
+                    message=f"OpenCLI host bridge connection failed: {type(exc).__name__}",
+                    retryable=True,
+                ),
+                metadata={"execution_mode": "host_bridge"},
+                at=fetched_at,
+            )
         except FileNotFoundError:
             return response_failure(
                 provider_id=self.provider_id,
@@ -110,6 +144,7 @@ class OpenCliProvider:
 
         metadata: dict[str, Any] = {
             "executable": executable_name(self._executable),
+            "execution_mode": "host_bridge" if self._bridge_url else "local_process",
             "return_code": command_result.return_code,
             "stderr_present": bool(command_result.stderr),
         }
@@ -176,8 +211,12 @@ class OpenCliProvider:
     async def health(self) -> ProviderHealth:
         checked_at = utc_now()
         try:
-            result = await self._runner((self._executable, "--version"))
-        except (FileNotFoundError, OSError):
+            result = (
+                await self._bridge_health()
+                if self._bridge_url
+                else await self._runner((self._executable, "--version"))
+            )
+        except (FileNotFoundError, OSError, httpx.RequestError):
             return ProviderHealth(
                 provider_id=self.provider_id,
                 status=ProviderHealthStatus.UNAVAILABLE,
@@ -196,6 +235,38 @@ class OpenCliProvider:
             status=ProviderHealthStatus.DEGRADED,
             checked_at=checked_at,
             detail="executable available; browser session is verified during collection",
+        )
+
+    async def _run_bridge(self, platform: Platform) -> CommandResult:
+        headers = self._bridge_headers()
+        response = await self._bridge_get(
+            f"v1/collect/{platform.value}",
+            params={"limit": self._limit},
+            headers=headers,
+        )
+        exit_code = int(response.headers.get("x-opencli-exit-code", "0"))
+        return CommandResult(
+            return_code=exit_code if exit_code else (0 if response.is_success else 1),
+            stdout=response.content if response.is_success else b"",
+            stderr=b"" if response.is_success else response.content,
+        )
+
+    async def _bridge_health(self) -> CommandResult:
+        response = await self._bridge_get("health", headers=self._bridge_headers())
+        return CommandResult(0 if response.is_success else 1, response.content, b"")
+
+    async def _bridge_get(self, path: str, **kwargs) -> httpx.Response:
+        url = urljoin(self._bridge_url or "", path)
+        if self._client is not None:
+            return await self._client.get(url, **kwargs)
+        async with httpx.AsyncClient(timeout=90, follow_redirects=False) as client:
+            return await client.get(url, **kwargs)
+
+    def _bridge_headers(self) -> dict[str, str]:
+        return (
+            {"Authorization": f"Bearer {self._bridge_token}"}
+            if self._bridge_token
+            else {}
         )
 
     @staticmethod
@@ -224,6 +295,13 @@ class OpenCliProvider:
                 kind=ProviderErrorKind.AUTHENTICATION,
                 code="opencli_authentication_failed",
                 message="OpenCLI browser session is not authenticated",
+                retryable=False,
+            )
+        if "bridge authentication" in detail:
+            return ProviderError(
+                kind=ProviderErrorKind.CONFIGURATION,
+                code="opencli_bridge_authentication_failed",
+                message="OpenCLI host bridge authentication failed",
                 retryable=False,
             )
         if any(
@@ -257,7 +335,7 @@ class OpenCliProvider:
                 invalid_count += 1
                 continue
             title = text_or_none(raw.get("title"))
-            url = text_or_none(raw.get("url"))
+            url = text_or_none(raw.get("url") or raw.get("link"))
             if not title or not url:
                 invalid_count += 1
                 continue
@@ -267,7 +345,9 @@ class OpenCliProvider:
                     url=url,
                     external_id=text_or_none(raw.get("id")),
                     rank=rank,
-                    hot_score=text_or_none(raw.get("likes")),
+                    hot_score=text_or_none(
+                        raw.get("likes") or raw.get("hot") or raw.get("score")
+                    ),
                     raw_data=raw,
                 )
             )

@@ -457,3 +457,30 @@ Freshness 采用保守证据规则：
 - HTTP/CLI 失败的响应体也保留在 `ProviderResult.raw_payload`，但验证工具只输出长度和 SHA-256，不泄漏原文。
 
 公开 Provider 的在线可用性不作为代码成功的替代证据。2026-08-14 的真实验证结果记录在 `docs/evidence/PHASE_2_PROVIDER_VALIDATION_2026-08-14.md`；当时四个平台均未取得可证明的 live 数据，因此任何 Dashboard、报告或推送都不得把本阶段测试 fixture 当成生产热点。
+
+## 21. 四平台采集可用性修补（2026-08-25）
+
+运行审计发现原默认链路在当前网络中无法完成生产采集：NewsNow 公共服务被 Cloudflare 拒绝，DailyHotApi 公共域名连接失败，Docker 后端没有 OpenCLI 可执行环境。旧 HotPush 的 5 分钟 RSS 抓取虽能取得部分微博/B站数据，但不进入 `RawHotItem → Snapshot` 链路。修补后 Collector V2 仍是唯一写入热点情报表的入口。
+
+默认 Provider 顺序如下，后台保存的显式配置仍可覆盖：
+
+| 平台 | Provider 顺序 | 证据/边界 |
+| --- | --- | --- |
+| douyin | DailyHotApi → NewsNow | 独立 DailyHotApi 容器；`fromCache=true` 必为 stale |
+| weibo | RSSHub → DailyHotApi → NewsNow | RSS `lastBuildDate` 超龄或缺失即 stale |
+| bilibili | RSSHub → DailyHotApi → NewsNow | RSS `lastBuildDate` 超龄或缺失即 stale |
+| xiaohongshu | OpenCLI | 必须使用已登录 Chrome；失败不回填旧榜单或假数据 |
+
+DailyHotApi 与 RSSHub 均保持为独立、可替换的网络服务，应用仓库只包含自行实现的 Provider 合同适配器，没有复制上游采集代码。RSSHub 当前使用 AGPL-3.0 上游容器，许可证和网络服务边界记录在 `THIRD_PARTY.md`。
+
+小红书采用主机桥接而不是把浏览器 Profile/Cookie 注入容器：主机上的 OpenCLI 连接 Chrome 官方 Browser Bridge，应用容器只向 `HOTSPOT_OPENCLI_BRIDGE_URL` 发送带 `HOTSPOT_OPENCLI_BRIDGE_TOKEN` 的固定只读请求。桥接器只映射预定义平台命令，不接受调用方提供的 shell 或写操作。未配置桥接、认证失败、扩展断开或登录过期都返回明确 Provider 失败。
+
+新增运行配置：
+
+- `HOTSPOT_DAILYHOTAPI_BASE_URL`
+- `HOTSPOT_RSSHUB_BASE_URL`（兼容已有 `RSSHUB_URL`）
+- `HOTSPOT_RSSHUB_MAX_AGE_MINUTES`
+- `HOTSPOT_OPENCLI_BRIDGE_URL`
+- `HOTSPOT_OPENCLI_BRIDGE_TOKEN`
+
+本次实采证据见 `docs/evidence/PLATFORM_COLLECTION_2026-08-25.md`。抖音、微博、B站取得 fresh 原始数据；小红书因 Chrome 扩展未连接保持 failed，零条实时数据。

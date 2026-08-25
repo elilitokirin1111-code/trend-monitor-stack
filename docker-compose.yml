@@ -62,6 +62,11 @@ services:
       - JWT_SECRET=please-change-this-to-a-random-string
       # RSSHub 实例配置
       - RSSHUB_URL=http://rsshub:1200
+      - HOTSPOT_RSSHUB_BASE_URL=http://rsshub:1200
+      - HOTSPOT_DAILYHOTAPI_BASE_URL=http://dailyhotapi:6688
+      # Windows 主机 OpenCLI 只读桥（小红书登录态；见 scripts/start-opencli-bridge.ps1）
+      - HOTSPOT_OPENCLI_BRIDGE_URL=${HOTSPOT_OPENCLI_BRIDGE_URL:-}
+      - HOTSPOT_OPENCLI_BRIDGE_TOKEN=${HOTSPOT_OPENCLI_BRIDGE_TOKEN:-}
       - FETCH_INTERVAL_MINUTES=5
       - HOTSPOT_COLLECTION_INTERVAL_MINUTES=30
       # AI 摘要配置（可选，支持 OpenAI/Claude/DeepSeek/Ollama 等）
@@ -83,6 +88,8 @@ services:
       redis:
         condition: service_healthy
       rsshub:
+        condition: service_healthy
+      dailyhotapi:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -121,6 +128,22 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    networks:
+      - hotpush-network
+
+  # DailyHotApi 数据源（固定镜像摘要，供抖音/B站及微博 fallback）
+  dailyhotapi:
+    image: imsyy/dailyhot-api@sha256:748fc79d29a422f512018e8a58ef1a0e20306dd6254637933960573fa37b1e5e
+    container_name: hotpush-dailyhotapi
+    expose:
+      - "6688"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:6688').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     networks:
       - hotpush-network
 

@@ -53,6 +53,10 @@ docker compose up -d
 | `hotspot_delivery_max_retries` | 2 | 投递重试上限（0–5） |
 | `hotspot_alerts_enabled` | false | 告警评估开关 |
 | `HOTSPOT_STRUCTURED_LOGS` | 未设置 | 设为 `1` 启用 JSON 结构化日志 |
+| `HOTSPOT_DAILYHOTAPI_BASE_URL` | `http://dailyhotapi:6688`（Compose） | 抖音主 Provider 地址 |
+| `HOTSPOT_RSSHUB_BASE_URL` | `http://rsshub:1200`（Compose） | 微博/B站主 Provider 地址 |
+| `HOTSPOT_RSSHUB_MAX_AGE_MINUTES` | 15 | RSS feed 超过该年龄即 stale |
+| `HOTSPOT_OPENCLI_BRIDGE_URL` / `HOTSPOT_OPENCLI_BRIDGE_TOKEN` | - | 小红书主机 Chrome 登录态桥接 |
 
 ## 3. 定时任务
 
@@ -96,6 +100,8 @@ docker compose up -d
 | 症状 | 排查步骤 |
 | --- | --- |
 | 某平台显示"采集失败" | `docker compose logs backend`；检查 `hotspot_provider_order_<platform>` 与 Provider 连通性；Dashboard 会如实显示失败，不伪造实时 |
+| 小红书 `BROWSER_CONNECT` / 0 条 | 确认 Chrome 已登录小红书且 OpenCLI Browser Bridge 扩展在线；运行 `scripts/start-opencli-bridge.ps1`；核对 Docker 中 bridge URL/Token；重建 backend |
+| 微博/B站 RSS stale | 检查 RSSHub health 和 feed `lastBuildDate`；必要时更新登录态/Cookie；不可手工把旧 feed 标为 fresh |
 | 数据"陈旧" | 查看 `stale_reason`（Provider 缓存 / 快照年龄 / 最近失败）；更新 Cookie 或等待下一窗口 |
 | 报告未生成 | `GET /api/v1/hotspots/reports` 查看最近 run；`POST .../regenerate` 手动重跑；检查 `hotspot_report_version` 与数据完整性 |
 | 投递失败 | `GET /api/v1/hotspots/deliveries?status=failed` 查看 error_kind/business code；检查 webhook URL 与签名密钥；`POST /api/v1/hotspots/deliveries/{id}/replay` 重放 |
@@ -117,14 +123,14 @@ docker compose up -d
 ## 8. 质量门禁（每个 Phase 提交前）
 
 1. 该 Phase 实现与测试完成
-2. `pytest -q` 全量通过（当前 292 tests）
+2. `pytest -q` 全量通过（当前 307 tests）
 3. 前端 `npm test` + `npm run build` 通过
 4. 更新 `docs/HOTSPOT_V1_TASKS.md`（完成项/遗留项/测试证据/commit）
 5. 独立 Git commit
 
 ## 9. 已知限制（上线前复核）
 
-- 四平台真实 live 数据依赖公开 Provider 可用性（见 Phase 2 证据），Dashboard/报告会如实标记失败与 stale。
+- 抖音、微博、B站已有本地 Provider 服务的 live 验证；小红书仍依赖用户主机 Chrome 登录授权。所有平台仍受上游可用性影响，Dashboard/报告会如实标记失败与 stale。
 - 平台条款、账号授权与个人信息采集合规性需业务负责人复核。
 - AI 分类/摘要默认关闭；启用前需完成人工评测集验收（Phase 7）。
 - 生产告警通道目前仅飞书 webhook（Phase 11 基础版）。
